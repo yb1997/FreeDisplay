@@ -4,6 +4,32 @@ All notable changes to FreeDisplay are documented here.
 
 ---
 
+## v1.1.0 (2026-10-31)
+
+First release of the [yb1997/FreeDisplay](https://github.com/yb1997/FreeDisplay) fork, built on [huberdf/FreeDisplay](https://github.com/huberdf/FreeDisplay) by MingJie Ji.
+
+### Fixes
+
+- **HiDPI keeps 144Hz**: the built-in *HiDPI Mode* preset now picks the largest HiDPI mode that runs at the display's top refresh rate (e.g. 2304×1296 HiDPI @ 144Hz instead of 2560×1440 HiDPI @ 60Hz), and re-applying a preset fixes a wrong refresh rate.
+- **Color Profile** shows the active profile's name instead of "Unknown" on external displays.
+- **Recommended color profiles** list the display's own profile plus sRGB and Display P3, instead of the MacBook's "Color LCD" or the cinema DCI-P3 profile.
+- **Crash** when pressing the brightness keys on an external display.
+- **Menu** no longer collapses to zero height.
+
+### Improvements
+
+- **English UI** with a Simplified Chinese translation (String Catalogs).
+- **Brightness key permission banner**: shows when Accessibility access is missing, opens the right settings pane, and picks up the permission without a restart.
+- **"Keep external displays above the built-in display"** is now an opt-in toggle instead of being forced on.
+- **Stable signing**: releases are signed with a fixed self-signed certificate, so the Accessibility permission survives updates.
+- **Update check** now points at this fork's releases.
+
+### Install note
+
+The app is not notarized (no Apple Developer account). On first launch macOS will say it can't verify the developer: open **System Settings → Privacy & Security** and click **Open Anyway**.
+
+---
+
 ## v1.0.0 (2026-03-05)
 
 Initial public release — full-featured BetterDisplay alternative.

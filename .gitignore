@@ -7,3 +7,6 @@ DerivedData/
 
 # Local signing identity (see Config/Signing.xcconfig)
 Config/Signing.local.xcconfig
+
+# Release builds (published on GitHub Releases, not committed)
+*.dmg

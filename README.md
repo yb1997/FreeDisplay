@@ -6,7 +6,7 @@ BetterDisplay is a great app, but its best features are locked behind a paid Pro
 
 > **About this fork:** FreeDisplay was created by **MingJie Ji ([@huberdf](https://github.com/huberdf))** — original repository: [huberdf/FreeDisplay](https://github.com/huberdf/FreeDisplay). This fork by [@yb1997](https://github.com/yb1997) adds the fixes and improvements listed under [Changes in this fork](#changes-in-this-fork). All credit for the original app goes to its author.
 
-[Original Project](https://github.com/huberdf/FreeDisplay) | [Original Releases](https://github.com/huberdf/FreeDisplay/releases/latest) | [Report an Issue in this Fork](https://github.com/yb1997/FreeDisplay/issues)
+[Download Latest Release](https://github.com/yb1997/FreeDisplay/releases/latest) | [Original Project](https://github.com/huberdf/FreeDisplay) | [Report an Issue](https://github.com/yb1997/FreeDisplay/issues)
 
 ---
 
@@ -66,11 +66,12 @@ Fixes and improvements on top of the original project:
 
 ### Option 1: Download DMG
 
-The DMG is the original author's build and does not include this fork's changes; build from source (Option 2) to get them.
-
-1. Download `FreeDisplay.dmg` from the [original project's Releases](https://github.com/huberdf/FreeDisplay/releases/latest)
+1. Download `FreeDisplay.dmg` from [Releases](https://github.com/yb1997/FreeDisplay/releases/latest)
 2. Open the DMG and drag **FreeDisplay.app** to **Applications**
-3. First launch: right-click → **Open** (unsigned app, one-time approval)
+3. Open FreeDisplay. macOS will say it can't verify the developer, because the app isn't notarized (that needs a paid Apple Developer account). Click **Done**, then go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. This is needed only once.
+
+   Or, from Terminal: `xattr -dr com.apple.quarantine /Applications/FreeDisplay.app`
+4. Grant **Accessibility** when asked, so the brightness keys work on external displays. Updates keep this permission.
 
 ### Option 2: Build from Source
 
@@ -89,6 +90,8 @@ Builds are ad-hoc signed by default, so no Apple developer account is needed. Ad
 1. Open **Keychain Access → Certificate Assistant → Create a Certificate…**, name it `FreeDisplay Local`, and set **Certificate Type** to **Code Signing**.
 2. `cp Config/Signing.local.xcconfig.example Config/Signing.local.xcconfig` (this file is gitignored).
 3. Rebuild, then grant Accessibility to the new build once.
+
+Releases (`./scripts/release.sh vX.Y.Z`) are signed with the same certificate, which is what lets users keep the Accessibility permission across updates. Keep a backup of it (Keychain Access → right-click the certificate → **Export** as `.p12`): signing a release with a different certificate makes every user grant Accessibility again.
 
 ---
 

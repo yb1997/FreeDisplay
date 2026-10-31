@@ -16,8 +16,8 @@ xcodebuild -scheme "$SCHEME" -configuration Release \
   clean build 2>&1 | tail -20
 
 # Find the .app
-APP_PATH=$(find "$BUILD_DIR" -name "${APP_NAME}.app" -type d | head -1)
-if [ -z "$APP_PATH" ]; then
+APP_PATH="$BUILD_DIR/Build/Products/Release/${APP_NAME}.app"
+if [ ! -d "$APP_PATH" ]; then
   echo "ERROR: ${APP_NAME}.app not found in build output"
   exit 1
 fi
@@ -27,9 +27,15 @@ echo "Found app: $APP_PATH"
 echo "=== Stripping extended attributes ==="
 xattr -cr "$APP_PATH"
 
-# Ad-hoc code sign
-echo "=== Signing ==="
-codesign --force --deep --sign - "$APP_PATH"
+# Sign with a stable identity so users' Accessibility grant survives updates
+# (an ad-hoc signature changes every build). Defaults to the local self-signed
+# certificate described in the README; set SIGN_IDENTITY=- for ad-hoc.
+SIGN_IDENTITY="${SIGN_IDENTITY:-FreeDisplay Local}"
+echo "=== Signing with: ${SIGN_IDENTITY} ==="
+codesign --force --deep --options runtime \
+  --entitlements FreeDisplay/FreeDisplay.entitlements \
+  --sign "$SIGN_IDENTITY" "$APP_PATH"
+codesign --verify --strict --verbose=2 "$APP_PATH"
 
 # Create staging directory for DMG
 STAGING_DIR="$BUILD_DIR/dmg-staging"
