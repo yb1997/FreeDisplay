@@ -7,6 +7,7 @@ struct ColorProfileView: View {
     @State private var profiles: [ICCProfile] = []
     @State private var isLoading: Bool = false
     @State private var selectedPath: URL?
+    @State private var factoryPaths: Set<String> = []
     @State private var applyingPath: URL? = nil
     @State private var applyError: String?
     @State private var applySuccess = false
@@ -18,14 +19,14 @@ struct ColorProfileView: View {
                     ProgressView()
                         .scaleEffect(0.65)
                         .frame(width: 14, height: 14)
-                    Text("正在加载描述文件…")
+                    Text("Loading profiles…")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
             } else if profiles.isEmpty {
-                Text("未找到描述文件")
+                Text("No profiles found")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 12)
@@ -36,7 +37,7 @@ struct ColorProfileView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
                             .font(.caption)
-                        Text("已应用")
+                        Text("Applied")
                             .font(.caption)
                             .foregroundColor(.green)
                     }
@@ -56,30 +57,30 @@ struct ColorProfileView: View {
                 let rest = otherProfiles
 
                 if !recommended.isEmpty {
-                    SectionBadge(title: "推荐")
+                    SectionBadge(title: String(localized: "Recommended"))
                     ForEach(recommended) { profile in
                         ProfileRow(
                             profile: profile,
-                            isSelected: selectedPath == profile.path,
+                            isSelected: isSelected(profile),
                             isApplying: applyingPath == profile.path,
                             isDisabled: applyingPath != nil,
                             onTap: { applyProfile(profile) }
                         )
-                        .help("切换至此颜色配置文件")
+                        .help("Switch to this color profile")
                     }
                 }
 
                 if !rest.isEmpty {
-                    SectionBadge(title: "所有描述文件")
+                    SectionBadge(title: String(localized: "All Profiles"))
                     ForEach(rest) { profile in
                         ProfileRow(
                             profile: profile,
-                            isSelected: selectedPath == profile.path,
+                            isSelected: isSelected(profile),
                             isApplying: applyingPath == profile.path,
                             isDisabled: applyingPath != nil,
                             onTap: { applyProfile(profile) }
                         )
-                        .help("切换至此颜色配置文件")
+                        .help("Switch to this color profile")
                     }
                 }
             }
@@ -89,16 +90,22 @@ struct ColorProfileView: View {
 
     // MARK: - Grouping
 
+    /// This display's own (EDID-generated) profile first, then the general-purpose sRGB and Display P3.
     private var recommendedProfiles: [ICCProfile] {
-        let keywords = ["sRGB", "P3", "Display", "LCD", "Apple", "Color LCD"]
-        return profiles.filter { p in
-            keywords.contains { p.name.localizedCaseInsensitiveContains($0) }
+        let own = profiles.filter { factoryPaths.contains($0.path.standardizedFileURL.path) }
+        let generic = ["sRGB IEC61966-2.1", "Display P3"].compactMap { name in
+            profiles.first { $0.name == name }
         }
+        return own + generic.filter { !own.contains($0) }
     }
 
     private var otherProfiles: [ICCProfile] {
-        let recommended = Set(recommendedProfiles.map(\.path))
-        return profiles.filter { !recommended.contains($0.path) }
+        let recommended = recommendedProfiles
+        return profiles.filter { !recommended.contains($0) }
+    }
+
+    private func isSelected(_ profile: ICCProfile) -> Bool {
+        selectedPath?.standardizedFileURL.path == profile.path.standardizedFileURL.path
     }
 
     // MARK: - Actions
@@ -110,6 +117,7 @@ struct ColorProfileView: View {
         let svc = ColorProfileService.shared
         let loaded = await svc.enumerateProfiles()
         let currentURL = svc.currentProfileURL(for: displayID)
+        factoryPaths = Set(svc.factoryProfileURLs(for: displayID).map { $0.standardizedFileURL.path })
         profiles = loaded
         selectedPath = currentURL
         isLoading = false
@@ -132,7 +140,7 @@ struct ColorProfileView: View {
                     applySuccess = false
                 }
             } else {
-                applyError = "应用失败，请重试"
+                applyError = String(localized: "Couldn’t apply. Please try again.")
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 3_000_000_000)
                     applyError = nil

@@ -108,6 +108,7 @@ final class PresetService: ObservableObject, @unchecked Sendable {
                 let alreadyActive = currentMode?.width == mode.width
                     && currentMode?.height == mode.height
                     && currentMode?.isHiDPI == mode.isHiDPI
+                    && abs((currentMode?.refreshRate ?? 0) - mode.refreshRate) < 0.5
                 if alreadyActive {
                     print("[PresetService]   -> resolution \(mode.width)×\(mode.height) hiDPI=\(mode.isHiDPI) already active, skipping mode switch")
                 } else {
@@ -217,7 +218,7 @@ final class PresetService: ObservableObject, @unchecked Sendable {
         }
 
         var nativePreset = DisplayPreset(
-            name: "原生模式",
+            name: String(localized: "Native Mode"),
             icon: "rectangle.on.rectangle",
             displays: nativeEntries
         )
@@ -233,9 +234,12 @@ final class PresetService: ObservableObject, @unchecked Sendable {
 
         if hasExternalWithHiDPI {
             let hidpiEntries: [DisplayPresetEntry] = externals.map { display in
-                // Pick the highest-resolution HiDPI mode available
-                if let bestHiDPI = display.availableModes
-                    .filter({ $0.isHiDPI })
+                // Pick the highest-resolution HiDPI mode that still runs at the display's top
+                // refresh rate (e.g. 2560×1440 HiDPI needs a 5K backing that is often 60Hz-only).
+                let hidpiModes = display.availableModes.filter { $0.isHiDPI }
+                let topRefresh = display.availableModes.map(\.refreshRate).max() ?? 0
+                let fullRateModes = hidpiModes.filter { $0.refreshRate >= topRefresh - 0.5 }
+                if let bestHiDPI = (fullRateModes.isEmpty ? hidpiModes : fullRateModes)
                     .max(by: { ($0.width * $0.height) < ($1.width * $1.height) }) {
                     return DisplayPresetEntry(
                         displayUUID: display.displayUUID,
@@ -262,7 +266,7 @@ final class PresetService: ObservableObject, @unchecked Sendable {
                 }
             }
             var hidpiPreset = DisplayPreset(
-                name: "HiDPI 模式",
+                name: String(localized: "HiDPI Mode"),
                 icon: "sparkles",
                 displays: hidpiEntries
             )

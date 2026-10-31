@@ -122,17 +122,23 @@ final class ColorProfileService: @unchecked Sendable {
     /// Returns the human-readable color space name for the given display.
     func currentColorSpaceName(for displayID: CGDirectDisplayID) -> String {
         let colorSpace = CGDisplayCopyColorSpace(displayID)
-        guard let cfName = colorSpace.name else { return "未知" }
-        return humanReadable(cfName as String)
+        if let cfName = colorSpace.name { return humanReadable(cfName as String) }
+        // Display color spaces are ICC-based and usually unnamed; use the profile's description.
+        if let iccData = colorSpace.copyICCData(),
+           let rawProfile = ColorSyncProfileCreate(iccData, nil),
+           let rawDesc = ColorSyncProfileCopyDescriptionString(rawProfile.takeRetainedValue()) {
+            return rawDesc.takeRetainedValue() as String
+        }
+        return String(localized: "Unknown")
     }
 
-    /// Returns a description like "内部 (8-bit)" for the display's current color mode.
+    /// Returns a description like "Internal (8-bit)" for the display's current color mode.
     func colorModeDescription(for displayID: CGDirectDisplayID) -> String {
-        guard let mode = CGDisplayCopyDisplayMode(displayID) else { return "未知" }
+        guard let mode = CGDisplayCopyDisplayMode(displayID) else { return String(localized: "Unknown") }
         let encoding: String
         if let cfEnc = mode.pixelEncoding { encoding = cfEnc as String } else { encoding = "" }
         let bpc = bitsPerChannel(from: encoding)
-        let source = CGDisplayIsBuiltin(displayID) != 0 ? "内部" : "外部"
+        let source = CGDisplayIsBuiltin(displayID) != 0 ? String(localized: "Internal") : String(localized: "External")
         return "\(source) (\(bpc)-bit)"
     }
 
@@ -193,6 +199,22 @@ final class ColorProfileService: @unchecked Sendable {
         }
 
         return nil
+    }
+
+    /// Returns the profile URLs ColorSync generated for this display (e.g. from its EDID).
+    func factoryProfileURLs(for displayID: CGDirectDisplayID) -> [URL] {
+        guard let rawUUID = CGDisplayCreateUUIDFromDisplayID(displayID),
+              let deviceClass = kColorSyncDisplayDeviceClass?.takeUnretainedValue()
+        else { return [] }
+        let uuid = rawUUID.takeRetainedValue()
+        guard let rawInfo = ColorSyncDeviceCopyDeviceInfo(deviceClass, uuid) else { return [] }
+        let info = rawInfo.takeRetainedValue() as NSDictionary
+        guard let factoryProfiles = info["FactoryProfiles"] as? NSDictionary else { return [] }
+        return factoryProfiles.allValues.compactMap { value in
+            guard let modeDict = value as? NSDictionary,
+                  let urlString = modeDict["DeviceProfileURL"] as? String else { return nil }
+            return URL(string: urlString)
+        }
     }
 
     // MARK: - Profile Switching
