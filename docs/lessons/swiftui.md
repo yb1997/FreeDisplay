@@ -27,3 +27,12 @@
 - `isSwitching = true; syncCall(); isSwitching = false` 模式无效：SwiftUI 不会在同步代码中间渲染 → 必须用 async/await 让 SwiftUI 有机会重绘
 - `@StateObject` 包装共享单例（`XXX.shared`）是反模式：每次 View 重建都可能创建新订阅 → 共享单例用 `@ObservedObject`
 - `CGSetDisplayTransferByFormula` 设置的 gamma table 是内核级持久的，不会随 View 销毁自动恢复 → 必须在 `onDisappear` 和 app 退出时手动调 `CGDisplayRestoreColorSyncSettings()`
+
+## 本地化 / String Catalog
+
+- UI 源语言是英文（`developmentLanguage: en`），中文在 `Localizable.xcstrings` 的 zh-Hans 里；❌ 不要在代码里直接写中文 UI 文案
+- `Text("literal")` / `Button` / `Label` / `.help("literal")` / `.alert` / `TextField` 的**字面量**会被当作 `LocalizedStringKey` 自动本地化
+- ⚠️ 以下情况是 `String`，**不会**自动本地化，必须写 `String(localized: "…")`：三元表达式 `Text(a ? "x" : "y")`、传给自定义组件的 `String` 参数（`ExpandableRow(label:)`、`SectionBadge(title:)` 等）、Service/Model 里返回的错误文案、`@State` 默认值
+- 插值的 key 格式：`String` → `%@`，`Int` → `%lld`（如 `"Show All %lld"`）；新增文案后要在 `Localizable.xcstrings` 补 zh-Hans，否则中文系统下显示英文
+- 检查漏翻：Release 构建后读 `Objects-normal/arm64/*.stringsdata` 的 key，与 catalog 对比
+

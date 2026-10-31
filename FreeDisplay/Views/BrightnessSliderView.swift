@@ -20,7 +20,7 @@ struct BrightnessSliderView: View {
                         .fill(Color.blue)
                         .frame(width: 5, height: 5)
                         .accessibilityHidden(true)
-                    Text("系统")
+                    Text("System")
                         .font(.caption2)
                         .foregroundColor(.blue)
                 } else if let status = ddcStatus {
@@ -28,15 +28,19 @@ struct BrightnessSliderView: View {
                         .fill(status ? Color.green : Color.orange)
                         .frame(width: 5, height: 5)
                         .accessibilityHidden(true)
-                    Text(status ? "DDC" : "软件")
+                    Text(status ? "DDC" : String(localized: "Software"))
                         .font(.caption2)
                         .foregroundColor(status ? .green : .orange)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.top, 2)
-            .accessibilityLabel(display.isBuiltin ? "亮度控制模式：系统" : "亮度控制模式：\(ddcStatus == true ? "DDC 硬件" : "软件模拟")")
-            .help(display.isBuiltin ? "系统亮度：通过系统 API 控制内建显示屏亮度" : "DDC: 硬件直接控制亮度\n软件: 通过软件调节亮度")
+            .accessibilityLabel(display.isBuiltin
+                ? String(localized: "Brightness control: System")
+                : (ddcStatus == true ? String(localized: "Brightness control: DDC hardware") : String(localized: "Brightness control: Software emulation")))
+            .help(display.isBuiltin
+                ? String(localized: "System brightness: controls the built-in display through the system API")
+                : String(localized: "DDC: controls brightness directly in the monitor hardware\nSoftware: dims the picture in software"))
 
             HStack(spacing: 6) {
                 let sunIcon: String = {
@@ -69,9 +73,9 @@ struct BrightnessSliderView: View {
                         lastDDCWrite = Date()
                     }
                 }
-                .accessibilityLabel("显示器亮度")
+                .accessibilityLabel("Display Brightness")
                 .accessibilityValue("\(Int(localBrightness))%")
-                .help("拖动调整亮度")
+                .help("Drag to adjust brightness")
                 .onChange(of: localBrightness) { _, newValue in
                     guard isDragging else { return }
                     // Apply immediately — the service chooses software or DDC internally.
@@ -97,7 +101,7 @@ struct BrightnessSliderView: View {
                     .accessibilityHidden(true)
 
                 let brightnessLabel: String = {
-                    if ddcStatus == false { return "软件 \(Int(localBrightness))%" }
+                    if ddcStatus == false { return String(localized: "Software") + " \(Int(localBrightness))%" }
                     return "\(Int(localBrightness))%"
                 }()
                 Text(brightnessLabel)
@@ -150,7 +154,7 @@ struct CombinedBrightnessView: View {
                     .foregroundColor(.yellow)
                     .font(.caption)
                     .accessibilityHidden(true)
-                Text("亮度（组合）")
+                Text("Brightness (Combined)")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 Spacer()
@@ -179,7 +183,7 @@ struct CombinedBrightnessView: View {
                         lastDDCWrite = Date()
                     }
                 }
-                .accessibilityLabel("组合亮度")
+                .accessibilityLabel("Combined Brightness")
                 .accessibilityValue("\(Int(combinedBrightness))%")
                 .onChange(of: combinedBrightness) { _, newValue in
                     guard isDragging else { return }

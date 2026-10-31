@@ -8,11 +8,26 @@ struct ArrangementView: View {
     @State private var draggedID: CGDirectDisplayID?
     @State private var dragOffset: CGSize = .zero
     @State private var dragError: String?
+    @AppStorage("fd.arrangement.externalAbove") private var autoArrangeExternalAbove = false
 
     private let canvasHeight: CGFloat = 160
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // Auto-arrange: keep external displays centered above the built-in display.
+            // Off by default — when on, it overrides manual arrangement on every display change.
+            Toggle(isOn: $autoArrangeExternalAbove) {
+                Text("Keep external displays above the built-in display")
+                    .font(.caption)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .padding(.horizontal, 4)
+            .help("When on, external displays are re-centered above the built-in display whenever a display connects, wakes or changes resolution (overrides manual arrangement)")
+            .onChange(of: autoArrangeExternalAbove) { _, enabled in
+                if enabled { displayManager.arrangeExternalAboveBuiltin() }
+            }
+
             // Visual canvas
             GeometryReader { geo in
                 ZStack {
@@ -50,7 +65,7 @@ struct ArrangementView: View {
                         if ok { displayManager.refreshDisplays() }
                     }
                 }) {
-                    Label("设 \(display.name) 为主显示器", systemImage: "star.fill")
+                    Label("Set \(display.name) as Main Display", systemImage: "star.fill")
                         .font(.caption)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
@@ -59,7 +74,7 @@ struct ArrangementView: View {
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
-                .help("将此显示器设为主显示器")
+                .help("Make this display the main display")
             }
         }
         .padding(.horizontal, 8)
@@ -78,7 +93,7 @@ struct ArrangementView: View {
                     x: rect.midX + (isDragged ? dragOffset.width : 0),
                     y: rect.midY + (isDragged ? dragOffset.height : 0)
                 )
-                .help("显示器：\(display.name)")
+                .help("Display: \(display.name)")
                 .gesture(
                     DragGesture()
                         .onChanged { value in
@@ -163,7 +178,7 @@ struct ArrangementView: View {
                 displayManager.refreshDisplays()
             } else {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    dragError = "显示器排列失败，请重试"
+                    dragError = String(localized: "Couldn’t arrange displays. Please try again.")
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                     withAnimation { self.dragError = nil }
@@ -221,7 +236,7 @@ private struct DisplayThumbnailView: View {
                     HStack(spacing: 2) {
                         Image(systemName: "star.fill")
                             .font(.system(size: 5))
-                        Text("主")
+                        Text("Main")
                             .font(.system(size: 6))
                     }
                     .foregroundColor(display.isBuiltin ? .white.opacity(0.9) : .blue)

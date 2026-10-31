@@ -24,10 +24,10 @@ struct ImageAdjustmentView: View {
         VStack(alignment: .leading, spacing: 0) {
 
             // ── Group 1: Global adjustments ────────────────────────────────
-            adjustRow(icon: "circle.righthalf.filled",   label: "对比度",  value: $contrast).help("调整 对比度")
-            adjustRow(icon: "sparkle",                   label: "伽马值",  value: $gammaVal).help("调整 伽马值")
-            adjustRow(icon: "bolt.fill",                 label: "增益",    value: $gain).help("调整 增益")
-            adjustRow(icon: "thermometer.medium",        label: "色温",    value: $colorTemperature).help("调整 色温")
+            adjustRow(icon: "circle.righthalf.filled",   label: String(localized: "Contrast"),  value: $contrast).help("Adjust contrast")
+            adjustRow(icon: "sparkle",                   label: String(localized: "Gamma"),  value: $gammaVal).help("Adjust gamma")
+            adjustRow(icon: "bolt.fill",                 label: String(localized: "Gain"),    value: $gain).help("Adjust gain")
+            adjustRow(icon: "thermometer.medium",        label: String(localized: "Color Temperature"),    value: $colorTemperature).help("Adjust color temperature")
             quantizationRow
 
             Divider()
@@ -35,18 +35,18 @@ struct ImageAdjustmentView: View {
                 .padding(.vertical, 2)
 
             // ── Group 2: Per-channel gamma ─────────────────────────────────
-            adjustRow(icon: "r.circle",      label: "伽马值 R",  value: $rGamma, accent: .red).help("调整 红色伽马值")
-            adjustRow(icon: "g.circle",      label: "伽马值 G",  value: $gGamma, accent: .green).help("调整 绿色伽马值")
-            adjustRow(icon: "b.circle",      label: "伽马值 B",  value: $bGamma, accent: .blue).help("调整 蓝色伽马值")
+            adjustRow(icon: "r.circle",      label: String(localized: "Gamma R"),  value: $rGamma, accent: .red).help("Adjust red gamma")
+            adjustRow(icon: "g.circle",      label: String(localized: "Gamma G"),  value: $gGamma, accent: .green).help("Adjust green gamma")
+            adjustRow(icon: "b.circle",      label: String(localized: "Gamma B"),  value: $bGamma, accent: .blue).help("Adjust blue gamma")
 
             Divider()
                 .padding(.horizontal, 12)
                 .padding(.vertical, 2)
 
             // ── Group 3: Per-channel gain ──────────────────────────────────
-            adjustRow(icon: "r.circle.fill", label: "增益 R",    value: $rGain,  accent: .red).help("调整 红色增益")
-            adjustRow(icon: "g.circle.fill", label: "增益 G",    value: $gGain,  accent: .green).help("调整 绿色增益")
-            adjustRow(icon: "b.circle.fill", label: "增益 B",    value: $bGain,  accent: .blue).help("调整 蓝色增益")
+            adjustRow(icon: "r.circle.fill", label: String(localized: "Gain R"),    value: $rGain,  accent: .red).help("Adjust red gain")
+            adjustRow(icon: "g.circle.fill", label: String(localized: "Gain G"),    value: $gGain,  accent: .green).help("Adjust green gain")
+            adjustRow(icon: "b.circle.fill", label: String(localized: "Gain B"),    value: $bGain,  accent: .blue).help("Adjust blue gain")
 
             Divider()
                 .padding(.horizontal, 12)
@@ -57,7 +57,7 @@ struct ImageAdjustmentView: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.yellow)
                     .font(.caption)
-                Text("调整可能影响 HDR 内容！")
+                Text("Adjustments may affect HDR content!")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -67,17 +67,17 @@ struct ImageAdjustmentView: View {
             // ── Action buttons ─────────────────────────────────────────────
             HStack(spacing: 8) {
                 actionButton(
-                    title: "反转色彩",
+                    title: String(localized: "Invert Colors"),
                     systemImage: "circle.lefthalf.filled",
                     isActive: isInverted
                 ) {
                     isInverted.toggle()
                     commitAdjustment()
                 }
-                .help("反转显示器色彩（类似夜间模式）")
+                .help("Invert display colors (similar to a night mode)")
 
                 actionButton(
-                    title: isPaused ? "继续调整" : "暂停调整",
+                    title: isPaused ? String(localized: "Resume Adjustments") : String(localized: "Pause Adjustments"),
                     systemImage: isPaused ? "play.circle" : "pause.circle",
                     isActive: isPaused
                 ) {
@@ -88,16 +88,16 @@ struct ImageAdjustmentView: View {
                         commitAdjustment()
                     }
                 }
-                .help("暂时停用色彩调整，恢复原始显示")
+                .help("Temporarily turn off color adjustments and restore the original display")
 
                 actionButton(
-                    title: "重置全部",
+                    title: String(localized: "Reset All"),
                     systemImage: "arrow.counterclockwise",
                     isActive: false
                 ) {
                     resetAll()
                 }
-                .help("重置所有色彩调整为默认值")
+                .help("Reset all color adjustments to their defaults")
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
@@ -161,14 +161,14 @@ struct ImageAdjustmentView: View {
                 .frame(width: 18)
                 .font(.caption)
 
-            Text("量化")
+            Text("Quantization")
                 .font(.caption)
                 .frame(width: 72, alignment: .leading)
 
             Slider(value: $quantLevels, in: 2...256, step: 1) { _ in
                 commitAdjustment()
             }
-            .help("调整 量化级别")
+            .help("Adjust quantization level")
 
             Text(quantLevels >= 255 ? "∞" : "\(Int(quantLevels))")
                 .font(.caption)

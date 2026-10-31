@@ -618,12 +618,14 @@ final class DDCService: ObservableObject, @unchecked Sendable {
     // MARK: - Public Async API (with retry)
 
     /// Asynchronously write a VCP value, retrying up to 3 times.
+    /// `completion` runs on the DDC queue, so it must be `@Sendable`: a closure written inside
+    /// a `@MainActor` method would otherwise inherit MainActor isolation and trap at runtime.
     /// Invalidates the cache for the written VCP code on success.
     func writeAsync(
         displayID: CGDirectDisplayID,
         command: UInt8,
         value: UInt16,
-        completion: ((Bool) -> Void)? = nil
+        completion: (@Sendable (Bool) -> Void)? = nil
     ) {
         ddcQueue.async {
             for attempt in 0..<3 {
@@ -646,7 +648,7 @@ final class DDCService: ObservableObject, @unchecked Sendable {
     func readAsync(
         displayID: CGDirectDisplayID,
         command: UInt8,
-        completion: @escaping ((current: UInt16, max: UInt16)?) -> Void
+        completion: @escaping @Sendable ((current: UInt16, max: UInt16)?) -> Void
     ) {
         // Fast path: return cached value if still fresh
         cacheLock.lock()

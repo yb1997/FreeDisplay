@@ -1,0 +1,15 @@
+// Code signing for the FreeDisplay target.
+//
+// Default: ad-hoc signing, so the project builds on any Mac without an Apple developer account.
+// Ad-hoc signatures change on every build, which makes macOS forget the Accessibility
+// permission the brightness keys need.
+//
+// To keep permissions across rebuilds, create a local code-signing certificate
+// (see README) and name it in Config/Signing.local.xcconfig (gitignored):
+//
+//     CODE_SIGN_IDENTITY = FreeDisplay Local
+
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+#include? "Signing.local.xcconfig"

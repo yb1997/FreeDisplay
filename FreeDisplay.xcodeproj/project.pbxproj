@@ -16,6 +16,7 @@
 		1F535E87C3C4F59A5D2AA618 /* AutoBrightnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 598AEDB5733E6B0E108E9EB5 /* AutoBrightnessView.swift */; };
 		20BC0BD119FFB0F3BAC751FD /* DisplayInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E64DDC8BA67C7E60001FDC6 /* DisplayInfo.swift */; };
 		2A82397FAC6CCCA0966AAED5 /* ColorProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C79B61823CE0057EF1E64215 /* ColorProfileView.swift */; };
+		3C5351F37586B794590BAE49 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 3374169DE3FC3D91F65C5554 /* InfoPlist.xcstrings */; };
 		3EA5920A3F5338CB1F05642C /* PresetService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C76FBEDC2A57F5FBBEE11AA0 /* PresetService.swift */; };
 		3EB262F0A45A2A8F1E9FBCE9 /* FreeDisplayApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D732A8A7009C298C78D6895C /* FreeDisplayApp.swift */; };
 		3EE2E724BDB262D96D408A44 /* AutoBrightnessService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D3E618AD92121297F8A33A /* AutoBrightnessService.swift */; };
@@ -37,6 +38,7 @@
 		80CA5725D4B2AA1D35E1C527 /* DDCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 719FFBCF3D3A63A6FFFC7172 /* DDCService.swift */; };
 		80F888F001C7F53E4FA362AD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 90F55D10A5241A8DFA941E4C /* Assets.xcassets */; };
 		87A763D8B6A6F9D9D9351AB7 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA0E0202B5E5AC58680DDDB /* MenuBarView.swift */; };
+		887CCF0D77A31133962460D9 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 0F6DFCAD93C87EAFD238ED32 /* Localizable.xcstrings */; };
 		8BD7199384F977B50A5EAB5B /* MirrorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 754025E6D6152C81F145C63C /* MirrorService.swift */; };
 		94A44781BBE01DF170DF6F64 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C11B24C0698CE807BA1E28D0 /* AppDelegate.swift */; };
 		B170F04C4FDA2E9A8D0AD6B0 /* BrightnessService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6ED9828FF4F2823DDB03014 /* BrightnessService.swift */; };
@@ -53,12 +55,15 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0372B83C2937BEB386FAC50A /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		0509F1D7107310B84B34B825 /* LaunchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchService.swift; sourceTree = "<group>"; };
 		0C8DE3994AD8E543BA765829 /* VirtualDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayView.swift; sourceTree = "<group>"; };
+		0F6DFCAD93C87EAFD238ED32 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		181D9C66D6F3D332AAC9AC0B /* SystemColorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemColorView.swift; sourceTree = "<group>"; };
 		1C7E2B33E54A6BAC64A84990 /* DisplayDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayDetailView.swift; sourceTree = "<group>"; };
 		1E64DDC8BA67C7E60001FDC6 /* DisplayInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayInfo.swift; sourceTree = "<group>"; };
 		22030BFC8A680A596A5764C9 /* ArrangementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArrangementService.swift; sourceTree = "<group>"; };
+		3374169DE3FC3D91F65C5554 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		3739D4F9F8A958DE959C133E /* NotchOverlayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayManager.swift; sourceTree = "<group>"; };
 		3B6EC27CA822E1D2F38769E0 /* FreeDisplay.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FreeDisplay.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4720147B44C6328686440A16 /* MainDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainDisplayView.swift; sourceTree = "<group>"; };
@@ -116,6 +121,8 @@
 				90F55D10A5241A8DFA941E4C /* Assets.xcassets */,
 				CA9AF9F043E5F5A61312476D /* FreeDisplay-Bridging-Header.h */,
 				BEC02E3AAD0509479979CBEA /* FreeDisplay.entitlements */,
+				3374169DE3FC3D91F65C5554 /* InfoPlist.xcstrings */,
+				0F6DFCAD93C87EAFD238ED32 /* Localizable.xcstrings */,
 				A453B875D0FCE891579A1967 /* App */,
 				BE57EFE41550D9B9A8CDB54F /* Models */,
 				DE58461EF4DFEB8547130F01 /* Resources */,
@@ -124,6 +131,14 @@
 				E4F6E4FC5398AA42CC190E49 /* Views */,
 			);
 			path = FreeDisplay;
+			sourceTree = "<group>";
+		};
+		3FF51B0AC275F11AB2E1E512 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				0372B83C2937BEB386FAC50A /* Signing.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		42B91B12346D648024A09155 /* Services */ = {
@@ -172,6 +187,7 @@
 		AD8C2B4D7F682DFFA53EF6B7 = {
 			isa = PBXGroup;
 			children = (
+				3FF51B0AC275F11AB2E1E512 /* Config */,
 				2D30F976B5C2E08A3682EC7D /* FreeDisplay */,
 				4D2DDE7731949C0697A6167C /* Products */,
 			);
@@ -249,21 +265,22 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					9433F0A8DC2A280F3C43CD1C = {
-						DevelopmentTeam = 29W56PHWJR;
+						DevelopmentTeam = "";
 					};
 				};
 			};
 			buildConfigurationList = 8EA410054BD32F42B7BB9BC3 /* Build configuration list for PBXProject "FreeDisplay" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
 				en,
+				"zh-Hans",
 			);
 			mainGroup = AD8C2B4D7F682DFFA53EF6B7;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 4D2DDE7731949C0697A6167C /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -279,6 +296,8 @@
 			files = (
 				80F888F001C7F53E4FA362AD /* Assets.xcassets in Resources */,
 				7BC8C11889A477C6501E5BC8 /* Assets.xcassets in Resources */,
+				3C5351F37586B794590BAE49 /* InfoPlist.xcstrings in Resources */,
+				887CCF0D77A31133962460D9 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -394,25 +413,26 @@
 		};
 		C31E82AC359B60F30E6FF8D3 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0372B83C2937BEB386FAC50A /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGNING_REQUIRED = YES;
 				CODE_SIGN_ENTITLEMENTS = FreeDisplay/FreeDisplay.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = 29W56PHWJR;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "FreeDisplay - Free & Open Source";
-				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "FreeDisplay 需要屏幕录制权限以显示各显示器的实时画面预览。";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "FreeDisplay needs Screen Recording access to show live previews of each display.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.freedisplay.app;
 				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "FreeDisplay/FreeDisplay-Bridging-Header.h";
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 6.0;
@@ -421,25 +441,26 @@
 		};
 		EF0A518D7028DBF61945BA75 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0372B83C2937BEB386FAC50A /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGNING_REQUIRED = YES;
 				CODE_SIGN_ENTITLEMENTS = FreeDisplay/FreeDisplay.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = 29W56PHWJR;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "FreeDisplay - Free & Open Source";
-				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "FreeDisplay 需要屏幕录制权限以显示各显示器的实时画面预览。";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "FreeDisplay needs Screen Recording access to show live previews of each display.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.freedisplay.app;
 				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "FreeDisplay/FreeDisplay-Bridging-Header.h";
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 6.0;

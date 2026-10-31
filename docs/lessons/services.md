@@ -89,3 +89,17 @@
 - **解法**: 创建前先 release 旧 assertion；onDisappear 只在 !preventSleep 时 release（保持开关 ON 时持续生效）
 - **教训**: 系统资源（IOPMAssertion、IO iterator 等）必须严格配对 create/release，覆盖 ID 前先 release 旧的
 - **日期**: 2026-03-04
+
+### L-028: 后台队列回调必须标 @Sendable（否则 Swift 6 运行时直接崩溃）
+- **现象**: 外接屏按亮度键后 FreeDisplay 立即崩溃（EXC_BREAKPOINT，`BUG IN CLIENT OF LIBDISPATCH: Block was expected to execute on queue [com.apple.main-thread]`，崩溃队列 `com.freedisplay.ddc`）
+- **原因**: `setBrightnessSmooth` 是 `@MainActor`，里面写的 DDC completion 闭包继承了 MainActor 隔离；`DDCService.writeAsync` 在 ddcQueue 上调用它 → Swift 6 运行时隔离检查 trap。`SWIFT_STRICT_CONCURRENCY: minimal` 不影响这个运行时检查
+- **解法**: `writeAsync` / `readAsync` 的 completion 参数改为 `@Sendable`（闭包不再继承调用方隔离）
+- **教训**: 任何在自有后台队列上回调的 completion 参数都要标 `@Sendable`；排查时看 `~/Library/Logs/DiagnosticReports/FreeDisplay-*.ips` 的崩溃队列名
+- **日期**: 2026-10-18
+
+### L-029: Ad-hoc 签名每次构建都会让辅助功能授权失效
+- **现象**: 亮度键对外接屏无效，系统设置里 FreeDisplay 的辅助功能开关却显示已开启
+- **原因**: Ad-hoc 签名的 designated requirement 是 cdhash，每次构建都变；TCC 记录的是旧 cdhash，新构建 `CGEvent.tapCreate` 返回 nil
+- **解法**: 用本地自签名证书签名（`Config/Signing.local.xcconfig` 设 `CODE_SIGN_IDENTITY`），requirement 变成 identifier + 证书，重建后授权保留；菜单里在 tap 未安装时显示提示
+- **排查**: `sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db"` 取 csreq，`csreq -r - -t` 对比 `codesign -dr -`；zsh 里 `log` 是内建命令，要用 `/usr/bin/log show`
+- **日期**: 2026-10-18

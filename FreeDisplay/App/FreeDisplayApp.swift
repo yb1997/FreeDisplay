@@ -10,14 +10,9 @@ struct FreeDisplayApp: App {
             MenuBarView()
                 .environmentObject(displayManager)
                 .task {
-                    // Enable "external above built-in" arrangement by default on first launch.
-                    let defaults = UserDefaults.standard
-                    if defaults.object(forKey: "fd.arrangement.externalAbove") == nil {
-                        defaults.set(true, forKey: "fd.arrangement.externalAbove")
-                    }
-
                     // After a 2-second delay (allows displays to fully initialize),
                     // position any external display above the built-in display.
+                    // No-op unless the user turned on `fd.arrangement.externalAbove` (off by default).
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 2_000_000_000)
                         displayManager.arrangeExternalAboveBuiltin()

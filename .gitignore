@@ -4,3 +4,6 @@ build/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 DerivedData/
 .build/
+
+# Local signing identity (see Config/Signing.xcconfig)
+Config/Signing.local.xcconfig

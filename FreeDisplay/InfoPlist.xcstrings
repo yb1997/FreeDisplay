@@ -1,0 +1,23 @@
+{
+  "sourceLanguage": "en",
+  "version": "1.0",
+  "strings": {
+    "NSScreenCaptureUsageDescription": {
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "FreeDisplay needs Screen Recording access to show live previews of each display."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FreeDisplay 需要屏幕录制权限以显示各显示器的实时画面预览。"
+          }
+        }
+      }
+    }
+  }
+}

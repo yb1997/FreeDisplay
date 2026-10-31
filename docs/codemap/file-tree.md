@@ -63,6 +63,8 @@ FreeDisplay/
 │   │   └── PresetService.swift             # 预设管理：保存/加载/应用显示器配置预设；使用 DisplayManagerAccessor 读取当前显示器状态；presets.json 存储在 ~/Library/Application Support/FreeDisplay/
 │   ├── Utilities/                  # 工具扩展
 │   │   └── NSScreenExtension.swift         # NSScreen 扩展：按 CGDirectDisplayID 查找 NSScreen，获取 displayID；被 NotchView、NotchOverlayManager 依赖
+│   ├── Localizable.xcstrings          # String Catalog：源语言 en（代码里写英文 key），zh-Hans 翻译；系统语言决定 UI 语言
+│   ├── InfoPlist.xcstrings            # Info.plist 文案（NSScreenCaptureUsageDescription）的 zh-Hans 翻译
 │   ├── FreeDisplay-Bridging-Header.h       # 私有 API 声明：CGVirtualDisplay（macOS 14+）和 IOAVService（Apple Silicon DDC）；属性名已对照 Chromium 源码验证（maxPixelsWide/maxPixelsHigh 非 maxPixelSize）
 │   └── Views/                      # SwiftUI 视图层
 │       ├── ArrangementView.swift           # 多显示器拖拽排列画布（内外屏缩略图区分）+ 设为主显示器按钮；依赖 ArrangementService
