@@ -455,8 +455,68 @@ struct SettingsView: View {
             .controlSize(.small)
             .padding(.horizontal, 12)
             .help("Check for a new version every time the app starts")
+
+            CheckForUpdatesRow()
         }
         .padding(.vertical, 6)
+    }
+}
+
+// MARK: - CheckForUpdatesRow
+
+/// "Check for Updates" button with the result of the last check underneath.
+private struct CheckForUpdatesRow: View {
+    @ObservedObject private var updateService = UpdateService.shared
+    @State private var isHovered = false
+    /// Only show "up to date" / errors after the user asked, not after the quiet launch check.
+    @State private var didCheckManually = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            MenuItemIcon(systemName: "arrow.down.circle", color: .blue)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Check for Updates")
+                    .font(.body)
+                if let status = statusText {
+                    Text(status)
+                        .font(.caption2)
+                        .foregroundColor(updateService.hasUpdate ? .green
+                                         : (updateService.lastCheckFailed ? .red : .secondary))
+                }
+            }
+            Spacer()
+            if updateService.isChecking {
+                ProgressView().controlSize(.small)
+            } else if updateService.hasUpdate {
+                Button("Download") { updateService.openReleasePage() }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("Open the release page to download the new version")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .background(Color.primary.opacity(isHovered ? 0.06 : 0))
+        .onHover { isHovered = $0 }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !updateService.isChecking else { return }
+            didCheckManually = true
+            Task { await updateService.checkForUpdates(force: true) }
+        }
+        .accessibilityAddTraits(.isButton)
+        .help("Check GitHub for a newer version of FreeDisplay")
+    }
+
+    private var statusText: String? {
+        if updateService.isChecking { return String(localized: "Checking…") }
+        if updateService.hasUpdate, let latest = updateService.latestVersion {
+            return String(localized: "Version \(latest) is available")
+        }
+        guard didCheckManually else { return nil }
+        if updateService.lastCheckFailed { return String(localized: "Couldn’t check for updates. Try again later.") }
+        return String(localized: "FreeDisplay \(updateService.currentVersion) is up to date")
     }
 }
 

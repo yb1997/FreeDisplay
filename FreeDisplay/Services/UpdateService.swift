@@ -20,19 +20,24 @@ final class UpdateService: ObservableObject, @unchecked Sendable {
     @Published var isChecking: Bool = false
     @Published var hasUpdate: Bool = false
     @Published var lastCheckDate: Date? = nil
+    /// True when the last check couldn't reach GitHub or got an unusable reply.
+    @Published var lastCheckFailed: Bool = false
 
     private init() {}
 
     // MARK: - Check for Updates
 
-    func checkForUpdates() async {
+    /// Checks GitHub for the latest release. The automatic launch check runs at most once
+    /// an hour; `force` (the Check for Updates button) always checks.
+    func checkForUpdates(force: Bool = false) async {
         guard !repoOwner.isEmpty, repoOwner != "OWNER", !repoName.isEmpty else {
             // Repo not yet configured — silently skip update check
             return
         }
-        if let last = lastCheckDate, Date().timeIntervalSince(last) < 3600 { return }
+        if !force, let last = lastCheckDate, Date().timeIntervalSince(last) < 3600 { return }
         guard !isChecking else { return }
         isChecking = true
+        lastCheckFailed = false
         defer { isChecking = false }
 
         let urlString = "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest"
@@ -44,7 +49,8 @@ final class UpdateService: ObservableObject, @unchecked Sendable {
             request.timeoutInterval = 10
             let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-                // Repo may not exist yet; silently ignore
+                // Repo may not exist yet, or rate-limited
+                lastCheckFailed = true
                 lastCheckDate = Date()
                 return
             }
@@ -55,6 +61,7 @@ final class UpdateService: ObservableObject, @unchecked Sendable {
                 #if DEBUG
                 print("[UpdateService] JSON parse error: \(error)")
                 #endif
+                lastCheckFailed = true
                 lastCheckDate = Date()
                 return
             }
@@ -63,10 +70,13 @@ final class UpdateService: ObservableObject, @unchecked Sendable {
                 latestVersion = clean
                 releaseURL = (json?["html_url"] as? String).flatMap { URL(string: $0) }
                 hasUpdate = isNewerVersion(clean, than: currentVersion)
+            } else {
+                lastCheckFailed = true
             }
             lastCheckDate = Date()
         } catch {
-            // Network unavailable or repo doesn't exist — silently ignore
+            // Network unavailable — the launch check stays quiet; the button shows it
+            lastCheckFailed = true
             lastCheckDate = Date()
         }
     }
