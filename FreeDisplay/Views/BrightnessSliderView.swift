@@ -9,6 +9,7 @@ struct BrightnessSliderView: View {
     @State private var ddcStatus: Bool? = nil  // nil=unknown, true=DDC, false=Software
     /// Throttle DDC writes during drag to ~100ms intervals.
     @State private var lastDDCWrite: Date = .distantPast
+    @State private var keyRefreshTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 2) {
@@ -115,12 +116,40 @@ struct BrightnessSliderView: View {
             .padding(.vertical, 4)
         }
         .task(id: display.displayID) {
-            localBrightness = display.brightness
+            localBrightness = display.brightness.rounded()
             updateDDCStatus()
+            // macOS changes built-in brightness on its own (brightness keys, ambient
+            // auto-brightness), so re-read it while the slider is on screen.
+            // The task is cancelled when the view disappears.
+            guard display.isBuiltin else { return }
+            while !Task.isCancelled {
+                if !isDragging {
+                    await BrightnessService.shared.refreshBrightness(for: display)
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+        // A built-in brightness key went to macOS: read the new level as it fades in instead
+        // of waiting for the next 1 s poll. Only an on-screen slider receives this.
+        .onReceive(BrightnessKeyService.shared.builtinKeyPressed) { _ in
+            guard display.isBuiltin else { return }
+            keyRefreshTask?.cancel()
+            keyRefreshTask = Task { @MainActor in
+                for delay: UInt64 in [50, 100, 200] {
+                    try? await Task.sleep(nanoseconds: delay * 1_000_000)
+                    if Task.isCancelled { return }
+                    if !isDragging {
+                        await BrightnessService.shared.refreshBrightness(for: display)
+                    }
+                }
+            }
         }
         .onChange(of: display.brightness) { _, newValue in
-            if !isDragging && abs(newValue - localBrightness) >= 1 {
-                localBrightness = newValue
+            // Round rather than skip sub-1% changes: readings are fractional (e.g. 62.9),
+            // and truncating them leaves the label 1% below the system's value.
+            let rounded = newValue.rounded()
+            if !isDragging && rounded != localBrightness {
+                localBrightness = rounded
             }
         }
     }
@@ -212,7 +241,7 @@ struct CombinedBrightnessView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .onAppear {
-            combinedBrightness = averageBrightness
+            combinedBrightness = averageBrightness.rounded()
         }
     }
 }

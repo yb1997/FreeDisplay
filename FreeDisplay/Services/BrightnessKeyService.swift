@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Combine
 import CoreGraphics
 import os
 
@@ -34,6 +35,11 @@ final class BrightnessKeyService: ObservableObject, @unchecked Sendable {
     /// True while the event tap is installed. False means macOS denied it
     /// (Accessibility not granted, or granted to a differently-signed build).
     @Published private(set) var isActive = false
+
+    /// Fires when a brightness key on the built-in display is passed through to macOS.
+    /// macOS changes the brightness itself, so on-screen sliders re-read it on this signal.
+    /// A subject rather than @Published, so presses don't re-render observers of this service.
+    let builtinKeyPressed = PassthroughSubject<Void, Never>()
 
     // MARK: - Private State
 
@@ -213,6 +219,7 @@ final class BrightnessKeyService: ObservableObject, @unchecked Sendable {
         if isBuiltin {
             // Cursor on built-in display — let macOS handle it normally.
             log.info("Brightness key on built-in display \(screenNumber), passing through")
+            DispatchQueue.main.async { self.builtinKeyPressed.send() }
             return Unmanaged.passRetained(event)
         }
 
