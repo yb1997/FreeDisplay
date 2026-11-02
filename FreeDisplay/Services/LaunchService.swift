@@ -16,6 +16,21 @@ final class LaunchService: @unchecked Sendable {
         return false
     }
 
+    /// True when macOS is waiting for the user to allow FreeDisplay in Login Items.
+    var needsApproval: Bool {
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .requiresApproval
+        }
+        return false
+    }
+
+    /// Opens System Settings › General › Login Items.
+    func openLoginItemsSettings() {
+        if #available(macOS 13.0, *) {
+            SMAppService.openSystemSettingsLoginItems()
+        }
+    }
+
     // MARK: - Enable / Disable
 
     @discardableResult

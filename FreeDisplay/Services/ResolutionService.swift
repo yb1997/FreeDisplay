@@ -7,25 +7,54 @@ final class ResolutionService: @unchecked Sendable {
     static let shared = ResolutionService()
     private init() {}
 
-    /// Persisted modeIDs keyed by displayID string. Used to re-apply modes after sleep/wake.
+    private static let savedModesKey = "fd.ResolutionService.savedModesByUUID"
+
+    /// Persisted modeIDs keyed by display UUID (CGDirectDisplayIDs change between sessions).
+    /// Used to re-apply modes after sleep/wake.
     private var savedModeIDs: [String: Int32] = {
-        (UserDefaults.standard.dictionary(forKey: "fd.ResolutionService.savedModes") as? [String: Int32]) ?? [:]
+        // The old displayID-keyed entries can't be mapped to UUIDs; drop them.
+        UserDefaults.standard.removeObject(forKey: "fd.ResolutionService.savedModes")
+        return (UserDefaults.standard.dictionary(forKey: savedModesKey) as? [String: Int32]) ?? [:]
     }()
 
+    /// True from willSleep until shortly after the wake re-apply. macOS resets modes around
+    /// sleep and those resets also arrive as setModeFlag; they must not overwrite the saved mode.
+    private var isSuppressingModeTracking = false
+
     private func persistModeID(_ modeID: Int32, for displayID: CGDirectDisplayID) {
-        savedModeIDs["\(displayID)"] = modeID
-        UserDefaults.standard.set(savedModeIDs, forKey: "fd.ResolutionService.savedModes")
+        savedModeIDs[DisplayInfo.uuid(for: displayID)] = modeID
+        UserDefaults.standard.set(savedModeIDs, forKey: Self.savedModesKey)
     }
 
-    private func clearSavedModeID(for displayID: CGDirectDisplayID) {
-        savedModeIDs.removeValue(forKey: "\(displayID)")
-        UserDefaults.standard.set(savedModeIDs, forKey: "fd.ResolutionService.savedModes")
+    /// Called for every completed setModeFlag reconfiguration. If FreeDisplay manages this
+    /// display's mode, follow changes made elsewhere (e.g. System Settings) so wake doesn't
+    /// revert them. Displays the user never set in FreeDisplay are left alone.
+    func noteModeChanged(for displayID: CGDirectDisplayID) {
+        guard !isSuppressingModeTracking else { return }
+        let uuid = DisplayInfo.uuid(for: displayID)
+        guard let savedID = savedModeIDs[uuid],
+              let currentID = CGDisplayCopyDisplayMode(displayID)?.ioDisplayModeID,
+              currentID != savedID else { return }
+        persistModeID(currentID, for: displayID)
+    }
+
+    /// Starts ignoring mode changes; called on willSleep.
+    func beginSleepSuppression() {
+        isSuppressingModeTracking = true
+    }
+
+    /// Stops ignoring mode changes after a delay that covers the wake re-apply's own callbacks.
+    func endSleepSuppression(after seconds: Double = 3.0) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            self.isSuppressingModeTracking = false
+        }
     }
 
     /// Re-applies the last user-set mode for `displayID` if it differs from the current active mode.
     /// Called on wake from sleep so macOS mode resets are corrected.
     func reapplySavedModeIfNeeded(for displayID: CGDirectDisplayID) {
-        guard let savedID = savedModeIDs["\(displayID)"] else { return }
+        guard let savedID = savedModeIDs[DisplayInfo.uuid(for: displayID)] else { return }
         let currentID = CGDisplayCopyDisplayMode(displayID)?.ioDisplayModeID
         guard currentID != savedID else { return }
 

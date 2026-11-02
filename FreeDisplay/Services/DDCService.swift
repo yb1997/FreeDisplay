@@ -370,10 +370,12 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         //   replyBuf[8] = current value high byte
         //   replyBuf[9] = current value low byte
         //  replyBuf[10] = checksum
-        guard replyBuf.count >= 10 else { return nil }
-
-        let maxVal = (UInt16(replyBuf[6]) << 8) | UInt16(replyBuf[7])
-        let curVal = (UInt16(replyBuf[8]) << 8) | UInt16(replyBuf[9])
+        guard let (curVal, maxVal) = Self.parseVCPReply(replyBuf, command: command) else {
+            #if DEBUG
+            print("[DDCService] ARM64 invalid reply for VCP 0x\(String(command, radix: 16)): " + replyBuf.map { String(format: "%02x", $0) }.joined(separator: " "))
+            #endif
+            return nil
+        }
         #if DEBUG
         print("[DDCService] ARM64 read VCP 0x\(String(command, radix: 16)): cur=\(curVal) max=\(maxVal)")
         #endif
@@ -592,10 +594,10 @@ final class DDCService: ObservableObject, @unchecked Sendable {
 
                     // DDC/CI VCP reply layout:
                     // [0x6E, 0x88, 0x02, errCode, VCPcode, type, max_hi, max_lo, cur_hi, cur_lo, chk]
-                    let rb = replyRaw.bindMemory(to: UInt8.self)
-                    let maxVal = (UInt16(rb[6]) << 8) | UInt16(rb[7])
-                    let curVal = (UInt16(rb[8]) << 8) | UInt16(rb[9])
-                    result = (current: curVal, max: maxVal)
+                    let rb = Array(replyRaw.bindMemory(to: UInt8.self))
+                    if let (curVal, maxVal) = DDCService.parseVCPReply(rb, command: command) {
+                        result = (current: curVal, max: maxVal)
+                    }
                 }
             }
             if let r = result { return r }
@@ -603,7 +605,36 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         return nil
     }
 
+    // MARK: - Reply Validation
+
+    /// Parses a DDC/CI Get VCP Feature reply:
+    ///   [0x6E, 0x88, 0x02, result, vcp, type, maxHi, maxLo, curHi, curLo, checksum]
+    /// Returns nil unless the opcode is 0x02, the result code is 0x00 (supported), the echoed
+    /// VCP code matches, the checksum (0x50 XOR bytes 0–9) matches and max > 0. Without this,
+    /// garbage such as all-0xFF reads as max = 65535 and marks DDC as working.
+    static func parseVCPReply(_ b: [UInt8], command: UInt8) -> (current: UInt16, max: UInt16)? {
+        guard b.count >= 11, b[2] == 0x02, b[3] == 0x00, b[4] == command else { return nil }
+        let checksum = b[0..<10].reduce(UInt8(0x50)) { $0 ^ $1 }
+        guard checksum == b[10] else { return nil }
+        let maxVal = (UInt16(b[6]) << 8) | UInt16(b[7])
+        let curVal = (UInt16(b[8]) << 8) | UInt16(b[9])
+        guard maxVal > 0 else { return nil }
+        return (current: curVal, max: maxVal)
+    }
+
     // MARK: - Cache Cleanup
+
+    /// Drops every cached VCP value and IOAVService so the next DDC call re-probes.
+    /// Called after wake, when monitors may not answer yet or services may have changed.
+    func clearAllCaches() {
+        cacheLock.withLock { vcpCache.removeAll() }
+#if arch(arm64)
+        avServiceLock.withLock {
+            avServiceCache.removeAll()
+            allExternalAVServices.removeAll()
+        }
+#endif
+    }
 
     /// Removes all cached VCP entries for a display that is no longer connected.
     func clearCache(for displayID: CGDirectDisplayID) {

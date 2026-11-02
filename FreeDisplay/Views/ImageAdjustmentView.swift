@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Expandable "图像调整" section — 11 sliders for software gamma/image adjustments.
+/// Expandable "Image Adjustments" section — 11 sliders for software gamma/image adjustments.
 /// Mirrors BetterDisplay's Image Adjustment panel.
 struct ImageAdjustmentView: View {
     @ObservedObject var display: DisplayInfo
@@ -83,7 +83,7 @@ struct ImageAdjustmentView: View {
                 ) {
                     isPaused.toggle()
                     if isPaused {
-                        GammaService.shared.applyIdentity(for: display.displayID)
+                        GammaService.shared.pause(for: display.displayID)
                     } else {
                         commitAdjustment()
                     }
@@ -120,13 +120,14 @@ struct ImageAdjustmentView: View {
             }
         }
         .onDisappear {
+            // Only persist here; never write gamma. This can also fire when the menu
+            // window closes, and must not undo the profile or software dimming.
             let isAtZero = contrast == 0 && gammaVal == 0 && gain == 0 &&
                 colorTemperature == 0 && rGamma == 0 && gGamma == 0 && bGamma == 0 &&
                 rGain == 0 && gGain == 0 && bGain == 0 && !isInverted &&
                 quantLevels == 256
             if isAtZero {
                 GammaService.shared.clearSavedState(for: display.displayID)
-                GammaService.shared.resetSingleDisplay(display.displayID)
             } else {
                 let adj = GammaAdjustment(
                     contrast: contrast, gammaVal: gammaVal, gain: gain,
@@ -231,7 +232,8 @@ struct ImageAdjustmentView: View {
         isInverted = false
         isPaused = false
         GammaService.shared.clearSavedState(for: display.displayID)
-        GammaService.shared.resetSingleDisplay(display.displayID)
+        // Keeps software dimming and the assigned color profile.
+        GammaService.shared.resetAdjustment(for: display.displayID)
     }
 }
 

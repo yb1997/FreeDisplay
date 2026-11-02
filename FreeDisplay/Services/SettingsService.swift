@@ -28,7 +28,6 @@ final class SettingsService: ObservableObject, @unchecked Sendable {
         static let launchAtLoginPrompted  = "fd.launchAtLogin.prompted"
         static let menuWidth              = "fd.menuWidth"
         static let showCombinedBrightness = "fd.showCombinedBrightness"
-        static let ddcCacheTTL            = "fd.ddcCacheTTL"
         static let checkUpdatesOnLaunch   = "fd.checkUpdatesOnLaunch"
         static let colorPickerHistory     = "fd.colorPickerHistory"
         // Per-display keys use prefix + displayID
@@ -55,10 +54,6 @@ final class SettingsService: ObservableObject, @unchecked Sendable {
         didSet { defaults.set(showCombinedBrightness, forKey: Keys.showCombinedBrightness) }
     }
 
-    @Published var ddcCacheTTL: Double = 5.0 {
-        didSet { defaults.set(ddcCacheTTL, forKey: Keys.ddcCacheTTL) }
-    }
-
     @Published var checkUpdatesOnLaunch: Bool = true {
         didSet { defaults.set(checkUpdatesOnLaunch, forKey: Keys.checkUpdatesOnLaunch) }
     }
@@ -72,14 +67,15 @@ final class SettingsService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Per-Display Settings
 
+    // Brightness is keyed by display UUID: CGDirectDisplayIDs change between sessions.
     func brightness(for displayID: CGDirectDisplayID) -> Double? {
-        let key = Keys.brightnessPrefix + "\(displayID)"
+        let key = Keys.brightnessPrefix + DisplayInfo.uuid(for: displayID)
         guard defaults.object(forKey: key) != nil else { return nil }
         return defaults.double(forKey: key)
     }
 
     func setBrightness(_ value: Double, for displayID: CGDirectDisplayID) {
-        defaults.set(value, forKey: Keys.brightnessPrefix + "\(displayID)")
+        defaults.set(value, forKey: Keys.brightnessPrefix + DisplayInfo.uuid(for: displayID))
     }
 
     func contrast(for displayID: CGDirectDisplayID) -> Double? {
@@ -132,8 +128,6 @@ final class SettingsService: ObservableObject, @unchecked Sendable {
             ? defaults.double(forKey: Keys.menuWidth) : 320
         showCombinedBrightness = defaults.object(forKey: Keys.showCombinedBrightness) != nil
             ? defaults.bool(forKey: Keys.showCombinedBrightness) : true
-        ddcCacheTTL = defaults.object(forKey: Keys.ddcCacheTTL) != nil
-            ? defaults.double(forKey: Keys.ddcCacheTTL) : 5.0
         checkUpdatesOnLaunch = defaults.object(forKey: Keys.checkUpdatesOnLaunch) != nil
             ? defaults.bool(forKey: Keys.checkUpdatesOnLaunch) : true
         colorPickerHistory = defaults.stringArray(forKey: Keys.colorPickerHistory) ?? []

@@ -58,11 +58,7 @@ struct ArrangementView: View {
             ForEach(displayManager.displays.filter { !$0.isMain }) { display in
                 Button(action: {
                     Task { @MainActor in
-                        let ok = await ArrangementService.shared.setAsMainDisplay(
-                            display.displayID,
-                            among: displayManager.displays
-                        )
-                        if ok { displayManager.refreshDisplays() }
+                        await displayManager.setAsMainDisplay(display)
                     }
                 }) {
                     Label("Set \(display.name) as Main Display", systemImage: "star.fill")
@@ -169,8 +165,10 @@ struct ArrangementView: View {
 
         let deltaX = Int(translation.width / scale)
         let deltaY = Int(translation.height / scale)
-        let newX = Int(display.bounds.origin.x) + deltaX
-        let newY = Int(display.bounds.origin.y) + deltaY
+        // Live bounds: DisplayInfo.bounds may not have caught up with the last change yet.
+        let origin = CGDisplayBounds(display.displayID).origin
+        let newX = Int(origin.x) + deltaX
+        let newY = Int(origin.y) + deltaY
 
         Task { @MainActor in
             let ok = await ArrangementService.shared.setPosition(x: newX, y: newY, for: display.displayID)
@@ -196,7 +194,7 @@ private struct DisplayThumbnailView: View {
 
     var body: some View {
         ZStack {
-            // 背景填充
+            // Background fill
             RoundedRectangle(cornerRadius: 4)
                 .fill(
                     display.isBuiltin
@@ -213,7 +211,7 @@ private struct DisplayThumbnailView: View {
                         )
                 )
 
-            // 外接显示器顶部装饰横条（边框感）
+            // Decorative top bar for external displays (bezel look)
             if !display.isBuiltin {
                 VStack {
                     RoundedRectangle(cornerRadius: 2)
@@ -225,7 +223,7 @@ private struct DisplayThumbnailView: View {
                 .padding(.top, 3)
             }
 
-            // 显示器名称 + 主显示标记
+            // Display name + main display badge
             VStack(spacing: 2) {
                 Text(display.name)
                     .font(.system(size: 8, weight: .medium))

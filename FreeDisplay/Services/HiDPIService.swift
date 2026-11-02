@@ -24,6 +24,30 @@ final class HiDPIService: @unchecked Sendable {
         return FileManager.default.fileExists(atPath: plistURL.path)
     }
 
+    // MARK: - Auto-enable opt-out
+
+    /// Error returned when the user cancels the administrator prompt.
+    static let authorizationCanceledMessage = String(localized: "Authorization was canceled")
+
+    private func autoEnableOptOutKey(vendor: UInt32, product: UInt32) -> String {
+        "fd.hidpi.autoEnableOptOut.\(String(vendor, radix: 16))-\(String(product, radix: 16))"
+    }
+
+    /// True when the user declined automatic HiDPI for this monitor model (declined the
+    /// prompt, canceled the admin password, or turned HiDPI off), so it isn't offered again.
+    func isAutoEnableOptedOut(vendor: UInt32, product: UInt32) -> Bool {
+        UserDefaults.standard.bool(forKey: autoEnableOptOutKey(vendor: vendor, product: product))
+    }
+
+    func setAutoEnableOptedOut(_ optedOut: Bool, vendor: UInt32, product: UInt32) {
+        let key = autoEnableOptOutKey(vendor: vendor, product: product)
+        if optedOut {
+            UserDefaults.standard.set(true, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
     /// Enables HiDPI for an external display via plist override.
     /// Requires display reconnect (or reboot) to apply.
     ///
@@ -33,26 +57,33 @@ final class HiDPIService: @unchecked Sendable {
                      product: UInt32,
                      nativeWidth: Int,
                      nativeHeight: Int) async -> String? {
-        return enableHiDPIPlist(vendor: vendor, product: product,
-                                nativeWidth: nativeWidth, nativeHeight: nativeHeight)
+        let err = enableHiDPIPlist(vendor: vendor, product: product,
+                                   nativeWidth: nativeWidth, nativeHeight: nativeHeight)
+        if err == nil { setAutoEnableOptedOut(false, vendor: vendor, product: product) }
+        return err
     }
 
     /// Legacy single-path enable (plist only).
     func enableHiDPI(vendor: UInt32, product: UInt32, nativeWidth: Int, nativeHeight: Int) -> String? {
-        enableHiDPIPlist(vendor: vendor, product: product,
-                         nativeWidth: nativeWidth, nativeHeight: nativeHeight)
+        let err = enableHiDPIPlist(vendor: vendor, product: product,
+                                   nativeWidth: nativeWidth, nativeHeight: nativeHeight)
+        if err == nil { setAutoEnableOptedOut(false, vendor: vendor, product: product) }
+        return err
     }
 
     /// Disables HiDPI for an external display by removing the plist override.
     func disableHiDPI(for displayID: CGDirectDisplayID,
                       vendor: UInt32,
                       product: UInt32) -> String? {
-        return disableHiDPIPlist(vendor: vendor, product: product)
+        disableHiDPI(vendor: vendor, product: product)
     }
 
     /// Legacy single-path disable (plist only).
+    /// Turning HiDPI off also opts the monitor out of automatic re-enabling.
     func disableHiDPI(vendor: UInt32, product: UInt32) -> String? {
-        disableHiDPIPlist(vendor: vendor, product: product)
+        let err = disableHiDPIPlist(vendor: vendor, product: product)
+        if err == nil { setAutoEnableOptedOut(true, vendor: vendor, product: product) }
+        return err
     }
 
     /// Refreshes availableModes on the given DisplayInfo after enabling HiDPI.
@@ -136,8 +167,10 @@ final class HiDPIService: @unchecked Sendable {
         appleScript.executeAndReturnError(&error)
         if let error = error {
             let msg = error[NSAppleScript.errorMessage] as? String ?? String(localized: "Unknown error")
-            if msg.contains("canceled") || msg.contains("Cancel") {
-                return String(localized: "Authorization was canceled")
+            // -128 = userCanceledErr (the user clicked Cancel in the password dialog)
+            if (error[NSAppleScript.errorNumber] as? Int) == -128
+                || msg.contains("canceled") || msg.contains("Cancel") {
+                return Self.authorizationCanceledMessage
             }
             return String(localized: "Administrator authorization failed: \(msg)")
         }

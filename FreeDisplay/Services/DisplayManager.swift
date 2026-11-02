@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import CoreGraphics
 
 // Global C-compatible callback for display reconfiguration.
@@ -11,7 +12,7 @@ private func displayReconfigCallback(
     guard let ptr = userInfo else { return }
     let manager = Unmanaged<DisplayManager>.fromOpaque(ptr).takeUnretainedValue()
 
-    let relevant: CGDisplayChangeSummaryFlags = [.addFlag, .removeFlag, .setMainFlag, .setModeFlag]
+    let relevant: CGDisplayChangeSummaryFlags = [.addFlag, .removeFlag, .setMainFlag, .setModeFlag, .movedFlag]
     guard !flags.intersection(relevant).isEmpty else { return }
 
     // Skip the begin-configuration notification; only act when the change is complete.
@@ -20,14 +21,22 @@ private func displayReconfigCallback(
 
     Task { @MainActor in
         if flags.intersection([.addFlag, .removeFlag]).isEmpty {
-            // Mode or main-display change: refresh mode info for existing displays only.
+            // Mode, main-display or position change: refresh existing displays only.
             manager.refreshExistingDisplayModes()
+            if flags.contains(.setModeFlag) {
+                // Follow resolution changes made outside FreeDisplay (System Settings etc.).
+                ResolutionService.shared.noteModeChanged(for: displayID)
+            }
         } else {
             manager.refreshDisplays()
         }
 
-        // Auto-rearrange after any display config change completes (debounced 500 ms).
-        manager.scheduleAutoArrange()
+        // Auto-rearrange after display config changes (debounced 500 ms), but not for
+        // move-only events: those come from the user dragging in System Settings, or from
+        // the auto-arrange itself, and must not be snapped back.
+        if !flags.intersection([.addFlag, .removeFlag, .setMainFlag, .setModeFlag]).isEmpty {
+            manager.scheduleAutoArrange()
+        }
     }
 }
 
@@ -41,15 +50,60 @@ class DisplayManager: ObservableObject {
     /// Work item used to debounce auto-arrange calls triggered by display config changes.
     private var autoArrangeWorkItem: DispatchWorkItem?
 
+    nonisolated(unsafe) private var sleepObservers: [NSObjectProtocol] = []
+
     init() {
         refreshDisplays()
         setupReconfigCallback()
+        setupSleepWakeObservers()
     }
 
     deinit {
         if let ctx = callbackContext {
             CGDisplayRemoveReconfigurationCallback(displayReconfigCallback, ctx)
             Unmanaged<DisplayManager>.fromOpaque(ctx).release()
+        }
+        sleepObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+    }
+
+    /// Registered here (not in the menu's `.task`, which only runs once the menu is opened)
+    /// so wake re-apply works from launch.
+    private func setupSleepWakeObservers() {
+        let center = NSWorkspace.shared.notificationCenter
+        sleepObservers.append(center.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { _ in
+            // macOS resets display modes around sleep; don't record those as user changes.
+            Task { @MainActor in ResolutionService.shared.beginSleepSuppression() }
+        })
+        sleepObservers.append(center.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.handleWake() }
+        })
+    }
+
+    private func handleWake() {
+        ResolutionService.shared.beginSleepSuppression()
+        Task { @MainActor in
+            // Give WindowServer 2 seconds to stabilize after wake before touching display state.
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            refreshDisplays()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            // Monitors may answer DDC differently after wake: probe every external display
+            // again. A display that still doesn't answer gets its software dimming back
+            // (BrightnessService.refreshBrightness handles that).
+            BrightnessService.shared.resetDDCState()
+            for display in displays {
+                // The in-memory software brightness factor is included by GammaService.
+                GammaService.shared.reapplyIfNeeded(for: display.displayID)
+                if !display.isBuiltin {
+                    Task { await BrightnessService.shared.refreshBrightness(for: display) }
+                }
+                // Re-apply any custom resolution that macOS may have reset on wake
+                ResolutionService.shared.reapplySavedModeIfNeeded(for: display.displayID)
+            }
+            ResolutionService.shared.endSleepSuppression()
         }
     }
 
@@ -89,7 +143,7 @@ class DisplayManager: ObservableObject {
         displays = updatedDisplays
         DisplayManagerAccessor.shared.displays = updatedDisplays
 
-        // Regenerate built-in presets (HiDPI 模式 / 原生模式) from updated display list.
+        // Regenerate built-in presets (HiDPI Mode / Native Mode) from updated display list.
         PresetService.shared.refreshBuiltins()
 
         // Only load details / refresh brightness for newly appeared displays
@@ -103,11 +157,11 @@ class DisplayManager: ObservableObject {
                 }
                 PresetService.shared.refreshBuiltins()
             }
-            // Restore saved gamma/software-brightness adjustments for the reconnected display.
+            // Restore the saved image adjustment for the reconnected display. Saved software
+            // dimming is restored by refreshBrightness once DDC turns out to be unavailable.
             // Brief delay lets WindowServer settle before we write transfer tables.
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                BrightnessService.shared.reapplySoftwareBrightnessIfNeeded(for: display)
                 GammaService.shared.reapplyIfNeeded(for: display.displayID)
             }
         }
@@ -120,23 +174,47 @@ class DisplayManager: ObservableObject {
         }
     }
 
-    /// Auto-enables HiDPI plist override for external 2K+ displays that don't have it yet.
-    /// This ensures switching between different monitors "just works" without manual re-enable.
+    /// True while the HiDPI offer is on screen, so two new displays don't stack alerts.
+    private var isOfferingHiDPI = false
+
+    /// Offers to enable the HiDPI plist override for external 2K+ displays that don't have it.
+    /// The user is asked first (it needs an administrator password); declining, canceling the
+    /// password prompt or later turning HiDPI off opts that monitor model out for good.
     private func autoEnableHiDPIIfNeeded(for display: DisplayInfo) async {
         let vendor = display.vendorNumber
         let product = display.modelNumber
-        guard vendor != 0, product != 0 else { return }
+        guard vendor != 0, product != 0,
+              CGDisplayVendorNumber(display.displayID) != VirtualDisplayService.virtualVendorID else { return }
 
-        // Already enabled — nothing to do
-        guard !HiDPIService.shared.isHiDPIEnabled(vendor: vendor, product: product) else { return }
+        // Already enabled, or the user said no before — nothing to do
+        guard !HiDPIService.shared.isHiDPIEnabled(vendor: vendor, product: product),
+              !HiDPIService.shared.isAutoEnableOptedOut(vendor: vendor, product: product) else { return }
 
         // Determine native resolution from available modes
         let (nativeW, nativeH) = display.nativeResolution
 
-        // Only auto-enable for 2K+ displays (width >= 2560 or total pixels >= 2560*1440)
+        // Only offer for 2K+ displays (width >= 2560 or total pixels >= 2560*1440)
         guard nativeW >= 2560 || (nativeW * nativeH >= 2560 * 1440) else { return }
 
-        print("[DisplayManager] Auto-enabling HiDPI for \(display.name) (\(nativeW)×\(nativeH), vendor=\(vendor), product=\(product))")
+        // Ask once launch/hot-plug setup has settled, one display at a time.
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+        guard !isOfferingHiDPI, displays.contains(where: { $0 === display }) else { return }
+        isOfferingHiDPI = true
+        defer { isOfferingHiDPI = false }
+
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Turn on HiDPI for \(display.name)?")
+        alert.informativeText = String(localized: "HiDPI makes text and images sharper on this display. Turning it on needs your administrator password once, and the display may need to be reconnected. You can change this later in the display’s HiDPI section.")
+        alert.addButton(withTitle: String(localized: "Turn On HiDPI"))
+        alert.addButton(withTitle: String(localized: "Not for This Display"))
+        // A menu-bar-only app must come forward, or the alert opens behind other windows.
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            HiDPIService.shared.setAutoEnableOptedOut(true, vendor: vendor, product: product)
+            return
+        }
+
+        print("[DisplayManager] Enabling HiDPI for \(display.name) (\(nativeW)×\(nativeH), vendor=\(vendor), product=\(product))")
 
         let err = await HiDPIService.shared.enableHiDPI(
             for: display.displayID,
@@ -148,6 +226,9 @@ class DisplayManager: ObservableObject {
 
         if let err {
             print("[DisplayManager] Auto-enable HiDPI failed: \(err)")
+            if err == HiDPIService.authorizationCanceledMessage {
+                HiDPIService.shared.setAutoEnableOptedOut(true, vendor: vendor, product: product)
+            }
         } else {
             print("[DisplayManager] Auto-enable HiDPI succeeded, refreshing modes")
             HiDPIService.shared.refreshModes(for: display)
@@ -175,13 +256,16 @@ class DisplayManager: ObservableObject {
         CGDisplayRegisterReconfigurationCallback(displayReconfigCallback, ctx)
     }
 
-    /// Refreshes mode info and main-display flag for already-tracked displays
-    /// (for setModeFlag / setMainFlag events).
+    /// Refreshes mode info, bounds, size and main-display flag for already-tracked displays
+    /// (for setModeFlag / setMainFlag / movedFlag events).
     /// Cheaper than a full `refreshDisplays()` — does not add/remove DisplayInfo objects.
     func refreshExistingDisplayModes() {
         for display in displays {
-            // Always refresh isMain synchronously since it's cheap and needed for setMainFlag events.
+            // Cheap synchronous reads; arrangement, auto-arrange and presets rely on them.
             display.isMain = CGDisplayIsMain(display.displayID) != 0
+            display.bounds = CGDisplayBounds(display.displayID)
+            display.pixelWidth = CGDisplayPixelsWide(display.displayID)
+            display.pixelHeight = CGDisplayPixelsHigh(display.displayID)
             Task {
                 let newMode = await Task.detached(priority: .userInitiated) {
                     DisplayMode.currentMode(for: display.displayID)
@@ -201,12 +285,12 @@ class DisplayManager: ObservableObject {
         return false
     }
 
-    /// Makes the target display the main display by repositioning it to origin (0, 0).
-    func setAsMainDisplay(_ display: DisplayInfo) {
-        Task { @MainActor in
-            let ok = await ArrangementService.shared.setAsMainDisplay(display.displayID, among: self.displays)
-            if ok { self.refreshDisplays() }
-        }
+    /// Makes the target display the main display by shifting the whole layout so it sits at (0, 0).
+    @discardableResult
+    func setAsMainDisplay(_ display: DisplayInfo) async -> Bool {
+        let ok = await ArrangementService.shared.setAsMainDisplay(display.displayID)
+        if ok { refreshDisplays() }
+        return ok
     }
 
     /// Positions all external displays above the built-in display, centered horizontally.
@@ -216,23 +300,38 @@ class DisplayManager: ObservableObject {
         guard UserDefaults.standard.bool(forKey: "fd.arrangement.externalAbove") else { return }
 
         guard let builtin = displays.first(where: { $0.isBuiltin }) else { return }
-        let externals = displays.filter { !$0.isBuiltin }
+        // Skip virtual displays FreeDisplay created; they aren't monitors to arrange.
+        let externals = displays
+            .filter { !$0.isBuiltin && CGDisplayVendorNumber($0.displayID) != VirtualDisplayService.virtualVendorID }
+            .sorted { CGDisplayBounds($0.displayID).origin.x < CGDisplayBounds($1.displayID).origin.x }
         guard !externals.isEmpty else { return }
 
-        let builtinX = Int(builtin.bounds.origin.x)
-        let builtinY = Int(builtin.bounds.origin.y)
-        let builtinWidth = Int(builtin.bounds.width)
+        // Read live bounds: DisplayInfo.bounds can lag behind a change still being processed.
+        let builtinBounds = CGDisplayBounds(builtin.displayID)
+        let sizes = externals.map { CGDisplayBounds($0.displayID).size }
+        let totalWidth = Int(sizes.reduce(0) { $0 + $1.width })
 
-        let arrangeItems = externals.map { ext in
-            let extWidth = Int(ext.bounds.width)
-            let centeredX = builtinX + (builtinWidth - extWidth) / 2
-            return (id: ext.displayID, x: centeredX, y: builtinY - Int(ext.bounds.height))
+        // Lay all externals side by side as one group, centered above the built-in display,
+        // bottoms aligned to its top edge.
+        var x = Int(builtinBounds.midX) - totalWidth / 2
+        var items: [(id: CGDirectDisplayID, x: Int, y: Int)] = []
+        for (ext, size) in zip(externals, sizes) {
+            items.append((id: ext.displayID, x: x, y: Int(builtinBounds.minY) - Int(size.height)))
+            x += Int(size.width)
         }
+
+        // Already in place: don't reconfigure (the reconfiguration callback would schedule
+        // this again after our own change).
+        let alreadyPlaced = items.allSatisfy { item in
+            let origin = CGDisplayBounds(item.id).origin
+            return Int(origin.x) == item.x && Int(origin.y) == item.y
+        }
+        guard !alreadyPlaced else { return }
+
         Task { @MainActor in
-            for item in arrangeItems {
-                await ArrangementService.shared.setPosition(x: item.x, y: item.y, for: item.id)
+            if await ArrangementService.shared.setOrigins(items) {
+                self.refreshDisplays()
             }
-            self.refreshDisplays()
         }
     }
 }

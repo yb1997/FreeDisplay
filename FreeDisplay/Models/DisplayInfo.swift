@@ -25,13 +25,17 @@ class DisplayInfo: ObservableObject, Identifiable {
 
     /// A stable identifier for the physical display that persists across sleep/wake
     /// even if macOS reassigns the CGDirectDisplayID.
-    var displayUUID: String {
+    var displayUUID: String { Self.uuid(for: displayID) }
+
+    /// Stable identifier for `displayID`, for use as a persistence key.
+    /// Usable before a DisplayInfo exists (e.g. in init or from Services).
+    nonisolated static func uuid(for displayID: CGDirectDisplayID) -> String {
         if let cfUUID = CGDisplayCreateUUIDFromDisplayID(displayID),
            let uuidStr = CFUUIDCreateString(nil, cfUUID.takeRetainedValue()) {
             return uuidStr as String
         }
         // Fallback: vendor+model+serial hash is more stable than raw displayID
-        return "v\(vendorNumber)-m\(modelNumber)-s\(serialNumber)"
+        return "v\(CGDisplayVendorNumber(displayID))-m\(CGDisplayModelNumber(displayID))-s\(CGDisplaySerialNumber(displayID))"
     }
 
     /// The native (highest non-HiDPI) resolution, used for HiDPI enablement and presets.

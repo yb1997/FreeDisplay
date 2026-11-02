@@ -17,6 +17,18 @@ extension CGVirtualDisplaySettings: @unchecked @retroactive Sendable {}
 @MainActor
 final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
     static let shared = VirtualDisplayService()
+
+    /// Vendor ID given to every virtual display FreeDisplay creates (must be non-zero).
+    static let virtualVendorID: UInt32 = 0xEEEE
+
+    /// Per-config serial number so several virtual displays don't share one identity
+    /// (macOS keys arrangement and color settings by vendor/product/serial).
+    /// Non-zero, derived from the config's UUID so it is stable across launches.
+    static func serialNumber(for configID: UUID) -> UInt32 {
+        let b = configID.uuid
+        let value = UInt32(b.0) << 24 | UInt32(b.1) << 16 | UInt32(b.2) << 8 | UInt32(b.3)
+        return value == 0 ? 1 : value
+    }
     private init() {
         loadConfigs()
     }
@@ -91,9 +103,9 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
         descriptor.maxPixelsWide = UInt32(w)
         descriptor.maxPixelsHigh = UInt32(h)
         descriptor.name = "FreeDisplay Virtual"
-        descriptor.vendorID = 0xEEEE  // non-zero required — 0 causes CGVirtualDisplay(descriptor:) to return nil
+        descriptor.vendorID = Self.virtualVendorID  // non-zero required — 0 causes CGVirtualDisplay(descriptor:) to return nil
         descriptor.productID = 0x0001
-        descriptor.serialNum = 0x0001
+        descriptor.serialNum = Self.serialNumber(for: config.id)
         // DO NOT set queue or color primaries — they are not needed and may interfere with creation
 
         guard let virtualDisplay = CGVirtualDisplay(descriptor: descriptor) else {
@@ -165,6 +177,15 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Config Management
 
+    /// Turns on a saved virtual display that isn't running. Returns true on success.
+    @discardableResult
+    func start(configID: UUID) async -> Bool {
+        guard !isActive(configID), let config = configs.first(where: { $0.id == configID }) else {
+            return false
+        }
+        return await create(config: config)
+    }
+
     @discardableResult
     func addAndCreate(_ config: VirtualDisplayConfig) async -> Bool {
         guard !configs.contains(where: { $0.id == config.id }) else {
@@ -202,7 +223,7 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
                     // After a crash, a virtual display from the previous session may
                     // still be registered with WindowServer. Skip creation if an online
                     // virtual display with matching dimensions already exists.
-                    guard !virtualDisplayAlreadyExists(width: config.width, height: config.height) else {
+                    guard !virtualDisplayAlreadyExists(for: config) else {
                         #if DEBUG
                         print("[VirtualDisplayService] autoCreate skipped — virtual display \(config.width)×\(config.height) already online")
                         #endif
@@ -214,23 +235,22 @@ final class VirtualDisplayService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    /// Returns true if any currently-online display matches the given pixel dimensions and
-    /// has no associated IOKit service port (indicating it is a virtual/software display).
+    /// Returns true if an online display already carries this config's virtual identity
+    /// (FreeDisplay's vendor ID and the config's serial number).
     /// Used by autoCreate to avoid duplicating a display that survived an app crash.
-    private func virtualDisplayAlreadyExists(width: Int, height: Int) -> Bool {
+    private func virtualDisplayAlreadyExists(for config: VirtualDisplayConfig) -> Bool {
         var displayCount: UInt32 = 0
         CGGetOnlineDisplayList(0, nil, &displayCount)
         guard displayCount > 0 else { return false }
         var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
         CGGetOnlineDisplayList(displayCount, &displayIDs, &displayCount)
         for id in displayIDs {
-            // A software/virtual display has no IOService entry (servicePort == 0 / MACH_PORT_NULL).
-            // Physical displays always have a non-null service port.
-            let servicePort = CGDisplayIOServicePort(id)
-            guard servicePort == 0 || servicePort == MACH_PORT_NULL else { continue }
-            let w = Int(CGDisplayPixelsWide(id))
-            let h = Int(CGDisplayPixelsHigh(id))
-            if w == width && h == height { return true }
+            // Match on vendor ID: on Apple Silicon CGDisplayIOServicePort is 0 for physical
+            // displays too, so a real monitor at the same size would block auto-create.
+            if CGDisplayVendorNumber(id) == Self.virtualVendorID,
+               CGDisplaySerialNumber(id) == Self.serialNumber(for: config.id) {
+                return true
+            }
         }
         return false
     }

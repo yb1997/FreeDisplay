@@ -2,13 +2,8 @@ import AppKit
 import CoreGraphics
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    private var wakeObserver: NSObjectProtocol?
-
-    /// Called by FreeDisplayApp to provide access to the live DisplayManager instance.
-    var onWake: (() -> Void)?
-
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 防止重复启动：如果已有实例在运行，直接退出
+        // Prevent duplicate launches: if an instance is already running, exit right away
         let runningApps = NSWorkspace.shared.runningApplications.filter {
             $0.bundleIdentifier == Bundle.main.bundleIdentifier
         }
@@ -21,19 +16,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Start intercepting brightness keys to route them to the display under the cursor.
         BrightnessKeyService.shared.start()
 
-        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.onWake?()
-        }
+        // Create the auto-brightness singleton now so a saved "enabled" setting starts
+        // polling at launch, not only once the Auto Brightness section is first shown.
+        _ = AutoBrightnessService.shared
+
+        // Wake re-apply (brightness, gamma, resolution) is handled by DisplayManager.
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if let obs = wakeObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(obs)
-        }
         BrightnessKeyService.shared.stop()
         // GammaService already handles CGDisplayRestoreColorSyncSettings via willTerminateNotification observer.
         VirtualDisplayService.shared.destroyAll()

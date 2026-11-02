@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// "自动亮度" section — follows builtin screen brightness and adjusts external display brightness automatically.
+/// "Auto Brightness" section — follows builtin screen brightness and adjusts external display brightness automatically.
 struct AutoBrightnessView: View {
     @StateObject private var service = AutoBrightnessService.shared
     @State private var isHovered = false
@@ -27,7 +27,8 @@ struct AutoBrightnessView: View {
                     .toggleStyle(.switch)
                     .labelsHidden()
                     .controlSize(.small)
-                    .disabled(builtinUnavailable)
+                    // Never lock the switch while it's on, or it can't be turned off.
+                    .disabled(builtinUnavailable && !service.isEnabled)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)

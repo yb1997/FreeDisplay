@@ -1,20 +1,20 @@
-# 踩坑经验索引 — FreeDisplay
+# Lessons Learned Index — FreeDisplay
 
-> 更新: 2026-03-05
+> Updated: 2026-03-05
 
-## 主题索引
+## Topic index
 
-| 主题 | 文件 | 条数 |
+| Topic | File | Entries |
 |------|------|------|
-| IOKit / DDC / 旋转 / 环境光 / 显示器匹配 / Apple Silicon | [iokit.md](iokit.md) | L-003, L-004, L-005 + 通用条目 |
-| CoreGraphics / HiDPI / CGVirtualDisplay | [coregraphics.md](coregraphics.md) | L-006, L-007, L-020 ~ L-027 + 通用条目 |
-| SwiftUI / MenuBarExtra / UI 动画 / DDC 缓存 / 性能 / 本地化 | [swiftui.md](swiftui.md) | 通用条目 |
-| 跨 Service 协作 / 并发 / 资源管理 / 签名与权限 | [services.md](services.md) | L-008 ~ L-019, L-028, L-029 |
-| Xcode 构建 / Phase 收尾 | [build.md](build.md) | 通用条目 |
+| IOKit / DDC / rotation / ambient light / display matching / Apple Silicon | [iokit.md](iokit.md) | L-003, L-004, L-005, L-033, L-035 + general entries |
+| CoreGraphics / HiDPI / CGVirtualDisplay | [coregraphics.md](coregraphics.md) | L-006, L-007, L-020 ~ L-027, L-030, L-031, L-036, L-037 + general entries |
+| SwiftUI / MenuBarExtra / UI animation / DDC cache / performance / localization | [swiftui.md](swiftui.md) | L-032 + general entries |
+| Cross-Service coordination / concurrency / resource management / signing and permissions | [services.md](services.md) | L-008 ~ L-019, L-028, L-029, L-034 |
+| Xcode build / phase wrap-up | [build.md](build.md) | General entries |
 
-## 永久规则（高频踩坑）
+## Permanent rules (frequent pitfalls)
 
-1. **新增 Swift 源文件后必须 `xcodegen generate`** — 否则编译器不知道新文件（"cannot find in scope"）
-2. **两个 Service 不能各自写同一 CoreGraphics 资源** — 指定唯一写入方，其他方通过接口影响（见 services.md L-008）
-3. **C 回调传 self 一律用 `Unmanaged.passRetained`，注销时配对 release** — passUnretained 是野指针定时炸弹
-4. **❌ CGConfigureDisplayMirrorOfDisplay 做 HiDPI** — Apple Silicon 上触发硬件镜像 + 鼠标卡顿，✅ 用 plist override（/Library/Displays/）
+1. **After adding a Swift source file you must run `xcodegen generate`** — otherwise the compiler doesn't know about the new file ("cannot find in scope")
+2. **Two Services must not each write the same CoreGraphics resource** — designate a single writer; the others influence it through its interface (see services.md L-008)
+3. **When passing self to a C callback, always use `Unmanaged.passRetained` and pair it with a release on unregister** — passUnretained is a dangling-pointer time bomb
+4. **❌ CGConfigureDisplayMirrorOfDisplay for HiDPI** — on Apple Silicon it triggers hardware mirroring + mouse stutter; ✅ use a plist override (/Library/Displays/)

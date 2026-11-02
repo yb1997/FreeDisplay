@@ -2,14 +2,6 @@ import Foundation
 import IOKit
 import CoreGraphics
 
-// CoreDisplay private API — reads the user-set brightness of a display (0.0–1.0).
-// Loaded via dlsym at runtime to avoid linking against the private CoreDisplay framework.
-private let _CoreDisplay_GetBrightness: (@convention(c) (CGDirectDisplayID) -> Double)? = {
-    guard let handle = dlopen("/System/Library/Frameworks/CoreDisplay.framework/CoreDisplay", RTLD_LAZY) else { return nil }
-    guard let sym = dlsym(handle, "CoreDisplay_Display_GetUserBrightness") else { return nil }
-    return unsafeBitCast(sym, to: (@convention(c) (CGDirectDisplayID) -> Double).self)
-}()
-
 /// Reads the built-in display's brightness (which macOS auto-adjusts based on ambient light)
 /// and syncs it to external displays. This avoids needing Intel-only LMU hardware access.
 @MainActor
@@ -67,10 +59,10 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
             return nil
         }
 
-        // Try CoreDisplay private API first.
-        let value = _CoreDisplay_GetBrightness?(builtinID) ?? 0
-        if value > 0 {
-            return min(1.0, max(0.0, value))
+        // Try the DisplayServices private API first (loaded in BrightnessService.swift).
+        // CoreDisplay_Display_GetUserBrightness is not used: on Apple Silicon it always returns 1.0.
+        if let value = displayServicesBrightness(for: builtinID), value > 0 {
+            return value
         }
 
         // Fallback: IODisplayGetFloatParameter via IOKit service matching
@@ -129,7 +121,10 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
 
         let targetPercentage = min(100.0, max(0.0, builtin * sensitivity * 100.0))
 
+        // At launch this service can poll before DisplayManager has listed the displays;
+        // don't record the reading as applied then, or it's skipped until brightness changes.
         let snapshot = DisplayManagerAccessor.shared.displays
+        guard snapshot.contains(where: { !$0.isBuiltin }) else { return }
         for display in snapshot {
             // Only sync to external (non-builtin) displays.
             guard !display.isBuiltin else { continue }
@@ -147,10 +142,13 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
     private let sensitivityKey = "fd.AutoBrightnessSensitivity"
 
     private func loadPrefs() {
-        isEnabled = UserDefaults.standard.bool(forKey: enabledKey)
-        if UserDefaults.standard.object(forKey: sensitivityKey) != nil {
-            sensitivity = UserDefaults.standard.double(forKey: sensitivityKey)
-        }
+        // Read both values before assigning either: each didSet calls savePrefs(), which
+        // writes BOTH keys and would overwrite the one not loaded yet with its default.
+        let savedEnabled = UserDefaults.standard.bool(forKey: enabledKey)
+        let savedSensitivity = UserDefaults.standard.object(forKey: sensitivityKey) != nil
+            ? UserDefaults.standard.double(forKey: sensitivityKey) : nil
+        if let savedSensitivity { sensitivity = savedSensitivity }
+        isEnabled = savedEnabled
     }
 
     private func savePrefs() {

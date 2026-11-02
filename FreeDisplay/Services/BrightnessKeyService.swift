@@ -227,8 +227,10 @@ final class BrightnessKeyService: ObservableObject, @unchecked Sendable {
                 log.error("Brightness key: display \(displayID) not in DisplayManager (known: \(displays.map(\.displayID)))")
                 return
             }
-            let newBrightness = max(0.0, min(100.0, display.brightness + step))
-            log.info("Brightness key on external display \(displayID): \(display.brightness) → \(newBrightness)")
+            // Step from where a running fade is heading, not from mid-fade.
+            let base = BrightnessService.shared.targetBrightness(for: display)
+            let newBrightness = max(0.0, min(100.0, base + step))
+            log.info("Brightness key on external display \(displayID): \(base) → \(newBrightness)")
             // Use smooth animation — cancels any in-progress animation automatically.
             BrightnessService.shared.setBrightnessSmooth(newBrightness, for: display)
 

@@ -119,12 +119,18 @@ struct MenuBarView: View {
 
     private static let maxScrollHeight: CGFloat = 640
 
+    /// Scroll targets placed at the end of sections that expand near the bottom of the menu.
+    private enum ScrollAnchor: Hashable {
+        case virtualDisplays, autoBrightness, settings
+    }
+
     private var visibleDisplays: [DisplayInfo] {
         displayManager.displays.filter { !virtualDisplayService.isVirtualDisplay($0.displayID) }
     }
 
     var body: some View {
         VStack(spacing: 0) {
+        ScrollViewReader { scrollProxy in
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
                 // Brightness keys can't reach external displays without Accessibility.
@@ -132,7 +138,7 @@ struct MenuBarView: View {
                     BrightnessKeyPermissionBanner { brightnessKeys.requestAccessibility() }
                 }
 
-                // 显示器列表
+                // Display list
                 ForEach(visibleDisplays) { display in
                     VStack(spacing: 0) {
                         DisplayRowView(
@@ -153,14 +159,14 @@ struct MenuBarView: View {
                     }
                 }
 
-                // 预设列表 (Phase 19)
+                // Preset list (Phase 19)
                 Divider()
                     .opacity(0.3)
                     .padding(.vertical, 2)
 
                 PresetListView()
 
-                // 排列显示器 section (Phase 4)
+                // Arrange Displays section (Phase 4)
                 if visibleDisplays.count > 1 {
                     Divider()
                         .opacity(0.3)
@@ -184,7 +190,7 @@ struct MenuBarView: View {
                     .opacity(0.3)
                     .padding(.vertical, 2)
 
-                // 组合亮度控制（Phase 2）
+                // Combined brightness control (Phase 2)
                 if settings.showCombinedBrightness {
                     CombinedBrightnessView(displays: displayManager.displays)
                     Divider()
@@ -192,7 +198,7 @@ struct MenuBarView: View {
                         .padding(.vertical, 2)
                 }
 
-                // 工具区标题
+                // Tools section header
                 Text("Tools")
                     .font(.caption2)
                     .fontWeight(.semibold)
@@ -201,7 +207,7 @@ struct MenuBarView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 2)
 
-                // 虚拟显示器工具入口 (Phase 10)
+                // Virtual Displays tool entry (Phase 10)
                 ExpandableRow(
                     icon: "display.2",
                     iconColor: .blue,
@@ -214,8 +220,9 @@ struct MenuBarView: View {
                         .padding(.leading, 8)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
+                Color.clear.frame(height: 0).id(ScrollAnchor.virtualDisplays)
 
-                // 自动亮度入口 (Phase 11)
+                // Auto Brightness entry (Phase 11)
                 ExpandableRow(
                     icon: "sun.and.horizon.fill",
                     iconColor: .orange,
@@ -228,12 +235,13 @@ struct MenuBarView: View {
                         .padding(.leading, 8)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
+                Color.clear.frame(height: 0).id(ScrollAnchor.autoBrightness)
 
                 Divider()
                     .opacity(0.3)
                     .padding(.vertical, 2)
 
-                // 设置区 (Phase 12)
+                // Settings section (Phase 12)
                 ExpandableRow(
                     icon: "gearshape.fill",
                     iconColor: .gray,
@@ -246,12 +254,13 @@ struct MenuBarView: View {
                         .padding(.leading, 8)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
+                Color.clear.frame(height: 0).id(ScrollAnchor.settings)
 
                 Divider()
                     .opacity(0.3)
                     .padding(.vertical, 2)
 
-                // 更新提示 (Phase 12)
+                // Update notice (Phase 12)
                 if updateService.hasUpdate, let ver = updateService.latestVersion {
                     HStack {
                         Image(systemName: "arrow.down.circle.fill")
@@ -286,10 +295,22 @@ struct MenuBarView: View {
         // collapses it to zero. Size it to its content, capped so long menus scroll.
         .frame(height: min(contentHeight, Self.maxScrollHeight))
         .onPreferenceChange(MenuContentHeightKey.self) { contentHeight = $0 }
+        // Expanding a section near the bottom adds rows below the visible area once the
+        // menu reaches its height cap; scroll so the whole section shows.
+        .onChange(of: showVirtualDisplays) { _, expanded in
+            if expanded { reveal(.virtualDisplays, with: scrollProxy) }
+        }
+        .onChange(of: showAutoBrightness) { _, expanded in
+            if expanded { reveal(.autoBrightness, with: scrollProxy) }
+        }
+        .onChange(of: showSettings) { _, expanded in
+            if expanded { reveal(.settings, with: scrollProxy) }
+        }
+        } // end ScrollViewReader
 
         Divider().opacity(0.3)
 
-        // 版本号与退出（固定在底部，不随内容滚动）
+        // Version and Quit (pinned to the bottom, doesn't scroll with the content)
         HStack {
             Text("FreeDisplay v\(updateService.currentVersion)")
                 .font(.caption)
@@ -335,6 +356,18 @@ struct MenuBarView: View {
     }
 }
 
+extension MenuBarView {
+    /// Scrolls so the end of a just-expanded section is visible. Waits briefly so the new
+    /// rows are laid out and the menu window has finished growing before scrolling.
+    private func reveal(_ anchor: ScrollAnchor, with proxy: ScrollViewProxy) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(anchor, anchor: .bottom)
+            }
+        }
+    }
+}
+
 // MARK: - SettingsView (Phase 12: embedded in MenuBarView)
 
 struct SettingsView: View {
@@ -342,7 +375,7 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // 开机自启动
+            // Launch at login
             Toggle(isOn: Binding(
                 get: { settings.launchAtLogin },
                 set: { newValue in
@@ -351,7 +384,11 @@ struct SettingsView: View {
                     } else {
                         LaunchService.shared.disable()
                     }
-                    settings.launchAtLogin = newValue
+                    // Show what actually happened: register() can fail or need approval.
+                    settings.launchAtLogin = LaunchService.shared.isEnabled
+                    if newValue && LaunchService.shared.needsApproval {
+                        LaunchService.shared.openLoginItemsSettings()
+                    }
                 }
             )) {
                 HStack(spacing: 6) {
@@ -366,7 +403,7 @@ struct SettingsView: View {
             .padding(.horizontal, 12)
             .help("Start FreeDisplay automatically when you log in")
 
-            // 首次启动提示：建议开启开机自启
+            // First-launch hint: recommend turning on Launch at Login
             if !settings.launchAtLoginPrompted {
                 HStack(spacing: 6) {
                     Image(systemName: "info.circle")
@@ -387,11 +424,11 @@ struct SettingsView: View {
                 .padding(.vertical, 2)
                 .onAppear {
                     // Mark as prompted so it only shows once
-                    // User dismisses manually via "知道了" button
+                    // User dismisses manually via "Got It" button
                 }
             }
 
-            // 显示组合亮度
+            // Show combined brightness
             Toggle(isOn: $settings.showCombinedBrightness) {
                 HStack(spacing: 6) {
                     MenuItemIcon(systemName: "sun.min.fill", color: .yellow)
@@ -405,7 +442,7 @@ struct SettingsView: View {
             .padding(.horizontal, 12)
             .help("Show one brightness slider for all displays in the menu")
 
-            // 启动时检查更新
+            // Check for updates at launch
             Toggle(isOn: $settings.checkUpdatesOnLaunch) {
                 HStack(spacing: 6) {
                     MenuItemIcon(systemName: "arrow.clockwise.circle", color: .blue)

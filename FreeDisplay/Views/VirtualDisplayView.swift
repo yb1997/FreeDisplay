@@ -1,7 +1,7 @@
 import SwiftUI
 import CoreGraphics
 
-/// "虚拟显示器" management section shown in the MenuBarView tools area.
+/// "Virtual Displays" management section shown in the MenuBarView tools area.
 /// Lists all saved virtual display configurations and allows creating / deleting them.
 struct VirtualDisplayView: View {
     @StateObject private var service = VirtualDisplayService.shared
@@ -20,7 +20,7 @@ struct VirtualDisplayView: View {
                     .padding(.vertical, 8)
             } else {
                 ForEach(service.configs) { config in
-                    configRow(config: config)
+                    VirtualDisplayConfigRow(config: config, service: service, configToDelete: $configToDelete)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                 }
@@ -92,11 +92,19 @@ struct VirtualDisplayView: View {
             }
         }
     }
+}
 
-    // MARK: - Config Row
+// MARK: - Config Row
 
-    @ViewBuilder
-    private func configRow(config: VirtualDisplayService.VirtualDisplayConfig) -> some View {
+/// One saved virtual display: name, size, Active badge, Turn On/Off and Delete.
+private struct VirtualDisplayConfigRow: View {
+    let config: VirtualDisplayService.VirtualDisplayConfig
+    @ObservedObject var service: VirtualDisplayService
+    @Binding var configToDelete: UUID?
+    @State private var isStarting = false
+    @State private var startFailed = false
+
+    var body: some View {
         let active = service.isActive(config.id)
 
         HStack(spacing: 8) {
@@ -110,7 +118,7 @@ struct VirtualDisplayView: View {
                     .lineLimit(1)
                 Text("\(config.width)×\(config.height)\(config.hiDPI ? " · HiDPI" : "") · \(Int(config.refreshRate))Hz")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(startFailed ? .red : .secondary)
             }
 
             Spacer()
@@ -125,6 +133,20 @@ struct VirtualDisplayView: View {
                     .background(Color.blue)
                     .cornerRadius(4)
             }
+
+            // Turn a saved display on or off without deleting it
+            Button(action: toggle) {
+                if isStarting {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label(active ? String(localized: "Turn Off") : String(localized: "Turn On"),
+                          systemImage: active ? "stop.circle" : "play.circle")
+                        .font(.caption)
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(isStarting)
+            .help(active ? "Turn off this virtual display" : "Turn on this virtual display")
 
             // Delete button
             Button(action: {
@@ -149,6 +171,19 @@ struct VirtualDisplayView: View {
             } label: {
                 Label("Delete", systemImage: "trash")
             }
+        }
+    }
+
+    private func toggle() {
+        if service.isActive(config.id) {
+            service.destroy(configID: config.id)
+            return
+        }
+        isStarting = true
+        startFailed = false
+        Task { @MainActor in
+            startFailed = !(await service.start(configID: config.id))
+            isStarting = false
         }
     }
 }

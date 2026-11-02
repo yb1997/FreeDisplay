@@ -19,10 +19,19 @@ struct GammaAdjustment {
     var quantizationLevels: Int = 256   // 256 = no quantization
     var isInverted: Bool = false
     var isPaused: Bool = false
+
+    /// True when every value is at its default, so the adjustment changes nothing.
+    var isNeutral: Bool {
+        contrast == 0 && gammaVal == 0 && gain == 0 && colorTemperature == 0 &&
+        rGamma == 0 && gGamma == 0 && bGamma == 0 && rGain == 0 && gGain == 0 && bGain == 0 &&
+        quantizationLevels >= 256 && !isInverted
+    }
 }
 
-/// Applies software gamma / image adjustments to a display using
-/// CoreGraphics CGSetDisplayTransferByFormula / CGSetDisplayTransferByTable.
+/// The single writer of display transfer (gamma) tables.
+/// The final table for a display combines the image adjustment (if one is active) with the
+/// software brightness factor from BrightnessService, so the two never overwrite each other.
+/// With neither active, the display's own color profile curve is restored.
 final class GammaService: @unchecked Sendable {
     static let shared = GammaService()
     private var terminateObserver: NSObjectProtocol?
@@ -33,17 +42,10 @@ final class GammaService: @unchecked Sendable {
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
-        ) { _ in
-            var displayCount: UInt32 = 0
-            CGGetOnlineDisplayList(32, nil, &displayCount)
-            var displays = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
-            CGGetOnlineDisplayList(displayCount, &displays, &displayCount)
-            for displayID in displays {
-                let size = 256
-                var r = (0..<size).map { CGGammaValue($0) / CGGammaValue(size - 1) }
-                var g = r; var b = r
-                CGSetDisplayTransferByTable(displayID, UInt32(size), &r, &g, &b)
-            }
+        ) { [weak self] _ in
+            guard let self else { return }
+            let touched = self.adjustmentsLock.withLock { self.touchedDisplays }
+            for displayID in touched { self.restoreProfileCurve(for: displayID) }
         }
     }
 
@@ -53,25 +55,12 @@ final class GammaService: @unchecked Sendable {
         }
     }
 
-    // MARK: - Active Adjustment Tracking
+    // MARK: - State
 
-    /// Stores the most recently applied non-paused adjustment per display.
+    /// Most recently applied adjustment per display (paused ones are kept so they can resume).
     private var activeAdjustments: [CGDirectDisplayID: GammaAdjustment] = [:]
-
-    /// Returns true if there is a currently active (non-paused) gamma adjustment for this display.
-    func hasActiveAdjustment(for displayID: CGDirectDisplayID) -> Bool {
-        adjustmentsLock.withLock {
-            guard let adj = activeAdjustments[displayID] else { return false }
-            return !adj.isPaused
-        }
-    }
-
-    /// Re-applies the stored adjustment (incorporating the current software brightness factor).
-    func reapply(for displayID: CGDirectDisplayID) {
-        let adj = adjustmentsLock.withLock { activeAdjustments[displayID] }
-        guard let adj, !adj.isPaused else { return }
-        applyInternal(adj, for: displayID)
-    }
+    /// Displays whose table this service has written, so quitting only restores those.
+    private var touchedDisplays: Set<CGDirectDisplayID> = []
 
     // MARK: - Public API
 
@@ -79,69 +68,73 @@ final class GammaService: @unchecked Sendable {
     func apply(_ adj: GammaAdjustment, for displayID: CGDirectDisplayID) {
         guard !adj.isPaused else { return }
         adjustmentsLock.withLock { activeAdjustments[displayID] = adj }
-        applyInternal(adj, for: displayID)
+        refresh(for: displayID)
     }
 
-    private func applyInternal(_ adj: GammaAdjustment, for displayID: CGDirectDisplayID) {
-        if adj.quantizationLevels < 256 {
-            applyQuantizedTable(adj, for: displayID)
-        } else {
-            applyFormula(adj, for: displayID)
+    /// Re-writes the display's table from the current adjustment and software brightness.
+    /// BrightnessService calls this after changing the software brightness factor.
+    func refresh(for displayID: CGDirectDisplayID) {
+        let adj = adjustmentsLock.withLock { activeAdjustments[displayID] }
+        let activeAdj = (adj.map { !$0.isPaused && !$0.isNeutral } == true) ? adj : nil
+        let factor = BrightnessService.shared.currentSoftwareBrightness(for: displayID) ?? 1.0
+
+        if activeAdj == nil && factor >= 1.0 {
+            // Nothing to apply. Only restore displays we changed; leave the rest alone.
+            let wasTouched = adjustmentsLock.withLock { touchedDisplays.remove(displayID) != nil }
+            if wasTouched { restoreProfileCurve(for: displayID) }
+            return
         }
+        writeTable(adj: activeAdj, factor: max(0.05, factor), for: displayID)
     }
 
-    /// Apply identity transfer (gamma 1.0) to a single display without
-    /// discarding stored parameters. Used by "pause" mode.
-    func applyIdentity(for displayID: CGDirectDisplayID) {
-        // Mark the adjustment as paused so hasActiveAdjustment returns false.
+    /// "Pause": stop showing the adjustment without discarding it. Software dimming stays.
+    func pause(for displayID: CGDirectDisplayID) {
         adjustmentsLock.withLock {
             if var adj = activeAdjustments[displayID] {
                 adj.isPaused = true
                 activeAdjustments[displayID] = adj
             }
         }
-        CGSetDisplayTransferByFormula(displayID,
-            0.0, 1.0, 1.0,
-            0.0, 1.0, 1.0,
-            0.0, 1.0, 1.0)
+        refresh(for: displayID)
     }
 
-    /// Restore all online displays to identity gamma (per-display, avoids global reset).
-    func restoreColorSync() {
-        adjustmentsLock.withLock { activeAdjustments.removeAll() }
-        var displayCount: UInt32 = 0
-        CGGetOnlineDisplayList(32, nil, &displayCount)
-        var displays = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
-        CGGetOnlineDisplayList(displayCount, &displays, &displayCount)
-        for displayID in displays {
-            resetSingleDisplay(displayID)
+    /// Removes the image adjustment for one display. Software dimming and the
+    /// assigned color profile are kept.
+    func resetAdjustment(for displayID: CGDirectDisplayID) {
+        adjustmentsLock.withLock { _ = activeAdjustments.removeValue(forKey: displayID) }
+        refresh(for: displayID)
+    }
+
+    /// Restores the display's color profile curve (including any calibration it carries)
+    /// by re-assigning its current profile: the custom one if set, otherwise the factory one.
+    /// Per display, unlike the global CGDisplayRestoreColorSyncSettings().
+    private func restoreProfileCurve(for displayID: CGDirectDisplayID) {
+        guard let rawUUID = CGDisplayCreateUUIDFromDisplayID(displayID),
+              let deviceClass = kColorSyncDisplayDeviceClass?.takeUnretainedValue(),
+              let profileIDKey = kColorSyncDeviceDefaultProfileID?.takeUnretainedValue()
+        else { return }
+        let uuid = rawUUID.takeRetainedValue()
+        var profile: Any = NSNull()  // NSNull = no custom profile, use the factory one
+        if let rawInfo = ColorSyncDeviceCopyDeviceInfo(deviceClass, uuid) {
+            let info = rawInfo.takeRetainedValue() as NSDictionary
+            // Same lookup as ColorProfileService.currentProfileURL: CustomProfiles is keyed by
+            // the active mode name found at FactoryProfiles[DeviceDefaultProfileID] (e.g. "1").
+            let activeMode = (info["FactoryProfiles"] as? NSDictionary)?[profileIDKey]
+            if let custom = info["CustomProfiles"] as? NSDictionary,
+               let current = activeMode.flatMap({ custom[$0] }) ?? custom.allValues.first {
+                profile = current
+            }
         }
+        ColorSyncDeviceSetCustomProfiles(deviceClass, uuid, [profileIDKey: profile] as CFDictionary)
     }
 
-    /// Resets gamma to identity for a single display without affecting other displays.
-    /// Also removes any custom ColorSync profile override so the factory ICC profile
-    /// is restored, preventing a "flat" / uncalibrated appearance after reset.
-    /// Prefer this over `restoreColorSync()` whenever only one display needs resetting.
-    func resetSingleDisplay(_ displayID: CGDirectDisplayID) {
-        adjustmentsLock.withLock { activeAdjustments.removeValue(forKey: displayID) }
-        let size = 256
-        var r = (0..<size).map { CGGammaValue($0) / CGGammaValue(size - 1) }
-        var g = r; var b = r
-        CGSetDisplayTransferByTable(displayID, UInt32(size), &r, &g, &b)
-
-        // Remove any custom ColorSync profile override so the factory ICC profile is
-        // re-activated (equivalent to a per-display ColorSync restore).
-        if let rawUUID = CGDisplayCreateUUIDFromDisplayID(displayID),
-           let deviceClass = kColorSyncDisplayDeviceClass?.takeUnretainedValue(),
-           let profileIDKey = kColorSyncDeviceDefaultProfileID?.takeUnretainedValue() {
-            let uuid = rawUUID.takeRetainedValue()
-            // Passing NSNull() for the profile key removes the custom override.
-            let removeInfo: NSDictionary = [profileIDKey: NSNull()]
-            ColorSyncDeviceSetCustomProfiles(deviceClass, uuid, removeInfo as CFDictionary)
-        }
-    }
+    // MARK: - Persistence (keyed by display UUID; CGDirectDisplayIDs change between sessions)
 
     private static func stateKey(for displayID: CGDirectDisplayID) -> String {
+        "fd.GammaService.savedAdjustment.\(DisplayInfo.uuid(for: displayID))"
+    }
+
+    private static func legacyStateKey(for displayID: CGDirectDisplayID) -> String {
         "fd.GammaService.savedAdjustment.\(displayID)"
     }
 
@@ -161,7 +154,15 @@ final class GammaService: @unchecked Sendable {
     }
 
     func loadSavedState(for displayID: CGDirectDisplayID) -> GammaAdjustment? {
-        guard let dict = UserDefaults.standard.dictionary(forKey: GammaService.stateKey(for: displayID)) else { return nil }
+        let defaults = UserDefaults.standard
+        var dict = defaults.dictionary(forKey: GammaService.stateKey(for: displayID))
+        if dict == nil, let legacy = defaults.dictionary(forKey: GammaService.legacyStateKey(for: displayID)) {
+            // Migrate a value saved under the old displayID key.
+            defaults.set(legacy, forKey: GammaService.stateKey(for: displayID))
+            defaults.removeObject(forKey: GammaService.legacyStateKey(for: displayID))
+            dict = legacy
+        }
+        guard let dict else { return nil }
         var adj = GammaAdjustment()
         adj.contrast           = dict["contrast"]           as? Double ?? 0
         adj.gammaVal           = dict["gammaVal"]           as? Double ?? 0
@@ -181,36 +182,64 @@ final class GammaService: @unchecked Sendable {
 
     func clearSavedState(for displayID: CGDirectDisplayID) {
         UserDefaults.standard.removeObject(forKey: GammaService.stateKey(for: displayID))
+        UserDefaults.standard.removeObject(forKey: GammaService.legacyStateKey(for: displayID))
     }
 
-    /// Re-applies the persisted gamma adjustment for a display (e.g. after wake from sleep
-    /// or display reconnect). No-op if no saved state exists or the adjustment is paused.
+    /// Re-applies the persisted adjustment and current software brightness for a display
+    /// (e.g. after wake from sleep or display reconnect).
     func reapplyIfNeeded(for displayID: CGDirectDisplayID) {
-        guard let adj = loadSavedState(for: displayID), !adj.isPaused else { return }
-        adjustmentsLock.withLock { activeAdjustments[displayID] = adj }
-        applyInternal(adj, for: displayID)
+        if let adj = loadSavedState(for: displayID) {
+            adjustmentsLock.withLock { activeAdjustments[displayID] = adj }
+        }
+        refresh(for: displayID)
     }
 
-    // MARK: - Formula mode
+    // MARK: - Table
+
+    /// Builds and writes the 256-entry table. Per channel and input x:
+    ///   gamma → gain × color temperature → contrast (stretch around 0.5) → invert → clamp
+    ///   → quantize → × software brightness factor.
+    /// Positive gain and contrast push values past 1 and are then clipped, so they now
+    /// brighten / stretch instead of being clamped away; every value is clamped to 0–1.
+    private func writeTable(adj: GammaAdjustment?, factor: Double, for displayID: CGDirectDisplayID) {
+        let a = adj ?? GammaAdjustment()
+        let p = channelParams(for: a)
+        // Contrast slider -100…+100 → slope 0.2…2.0 around mid-grey (0 → 1.0).
+        let c = a.contrast / 100.0
+        let slope = c >= 0 ? 1.0 + c : 1.0 + 0.8 * c
+        let levels = max(2, min(256, a.quantizationLevels))
+
+        let size = 256
+        func channel(gamma: Double, scale: Double) -> [CGGammaValue] {
+            (0..<size).map { i in
+                let x = Double(i) / Double(size - 1)
+                var v = pow(x, gamma) * scale
+                v = 0.5 + (v - 0.5) * slope
+                v = max(0.0, min(1.0, v))
+                if a.isInverted { v = 1.0 - v }
+                if levels < 256 {
+                    v = (v * Double(levels - 1)).rounded() / Double(levels - 1)
+                }
+                return CGGammaValue(v * factor)
+            }
+        }
+        var red   = channel(gamma: p.rGam, scale: p.rScale)
+        var green = channel(gamma: p.gGam, scale: p.gScale)
+        var blue  = channel(gamma: p.bGam, scale: p.bScale)
+
+        adjustmentsLock.withLock { _ = touchedDisplays.insert(displayID) }
+        let result = CGSetDisplayTransferByTable(displayID, UInt32(size), &red, &green, &blue)
+        #if DEBUG
+        if result != .success {
+            print("[GammaService] CGSetDisplayTransferByTable failed: \(result)")
+        }
+        #endif
+    }
 
     private struct ChannelParams {
-        var rLo, rHi, rGam: Double
-        var gLo, gHi, gGam: Double
-        var bLo, bHi, bGam: Double
-    }
-
-    private func applyFormula(_ adj: GammaAdjustment, for displayID: CGDirectDisplayID) {
-        var p = channelParams(for: adj)
-        // Incorporate software brightness factor so BrightnessService and GammaService
-        // do not overwrite each other's transfer function.
-        let brightnessFactor = max(0.05, BrightnessService.shared.currentSoftwareBrightness(for: displayID) ?? 1.0)
-        p.rHi = min(1.0, p.rHi * brightnessFactor)
-        p.gHi = min(1.0, p.gHi * brightnessFactor)
-        p.bHi = min(1.0, p.bHi * brightnessFactor)
-        CGSetDisplayTransferByFormula(displayID,
-            CGGammaValue(p.rLo), CGGammaValue(p.rHi), CGGammaValue(p.rGam),
-            CGGammaValue(p.gLo), CGGammaValue(p.gHi), CGGammaValue(p.gGam),
-            CGGammaValue(p.bLo), CGGammaValue(p.bHi), CGGammaValue(p.bGam))
+        var rScale, rGam: Double
+        var gScale, gGam: Double
+        var bScale, bGam: Double
     }
 
     private func channelParams(for adj: GammaAdjustment) -> ChannelParams {
@@ -221,7 +250,7 @@ final class GammaService: @unchecked Sendable {
         let gGammaExp = globalGammaExp * pow(2.0, -adj.gGamma / 100.0)
         let bGammaExp = globalGammaExp * pow(2.0, -adj.bGamma / 100.0)
 
-        // ── Gain (output ceiling / brightness scale) ────────────────────
+        // ── Gain (output scale) ─────────────────────────────────────────
         // slider=0 → 1.0; +100 → 2.0; -100 → 0.0
         let globalGain = max(0.0, 1.0 + adj.gain / 100.0)
         let rGain = max(0.0, globalGain * (1.0 + adj.rGain / 100.0))
@@ -231,38 +260,10 @@ final class GammaService: @unchecked Sendable {
         // ── Color temperature ───────────────────────────────────────────
         let (tempR, tempG, tempB) = colorTempFactors(adj.colorTemperature)
 
-        // Per-channel max after gain × color-temp
-        let rHiBase = rGain * tempR
-        let gHiBase = gGain * tempG
-        let bHiBase = bGain * tempB
-
-        // ── Contrast (symmetric push/pull of min and max) ───────────────
-        // ±100% → ±0.4 shift, widening/narrowing the output range
-        let contrastShift = adj.contrast / 250.0
-
-        var rLo = 0.0 - contrastShift
-        var gLo = 0.0 - contrastShift
-        var bLo = 0.0 - contrastShift
-        var rHi = rHiBase + contrastShift
-        var gHi = gHiBase + contrastShift
-        var bHi = bHiBase + contrastShift
-
-        // ── Inversion (swap min ↔ max per channel) ─────────────────────
-        if adj.isInverted {
-            swap(&rLo, &rHi)
-            swap(&gLo, &gHi)
-            swap(&bLo, &bHi)
-        }
-
-        // ── Clamp to [0, 1] required by CGSetDisplayTransferByFormula ──
-        rLo = max(0.0, rLo); rHi = min(1.0, rHi)
-        gLo = max(0.0, gLo); gHi = min(1.0, gHi)
-        bLo = max(0.0, bLo); bHi = min(1.0, bHi)
-
         return ChannelParams(
-            rLo: rLo, rHi: rHi, rGam: rGammaExp,
-            gLo: gLo, gHi: gHi, gGam: gGammaExp,
-            bLo: bLo, bHi: bHi, bGam: bGammaExp)
+            rScale: rGain * tempR, rGam: rGammaExp,
+            gScale: gGain * tempG, gGam: gGammaExp,
+            bScale: bGain * tempB, bGam: bGammaExp)
     }
 
     // MARK: - Color temperature (Tanner Helland algorithm)
@@ -313,42 +314,5 @@ final class GammaService: @unchecked Sendable {
         }
 
         return (r, g, b)
-    }
-
-    // MARK: - Quantization (table mode)
-
-    private func applyQuantizedTable(_ adj: GammaAdjustment, for displayID: CGDirectDisplayID) {
-        let levels = max(2, min(255, adj.quantizationLevels))
-        let capacity = 256
-
-        var redTable   = [CGGammaValue](repeating: 0, count: capacity)
-        var greenTable = [CGGammaValue](repeating: 0, count: capacity)
-        var blueTable  = [CGGammaValue](repeating: 0, count: capacity)
-
-        var p = channelParams(for: adj)
-        // Incorporate software brightness factor, matching applyFormula behaviour.
-        let brightnessFactor = max(0.05, BrightnessService.shared.currentSoftwareBrightness(for: displayID) ?? 1.0)
-        p.rHi = min(1.0, p.rHi * brightnessFactor)
-        p.gHi = min(1.0, p.gHi * brightnessFactor)
-        p.bHi = min(1.0, p.bHi * brightnessFactor)
-
-        for i in 0..<capacity {
-            let input = Double(i) / Double(capacity - 1)
-
-            func tableValue(lo: Double, hi: Double, gam: Double) -> CGGammaValue {
-                let raw = lo + (hi - lo) * pow(input, gam)
-                let clamped = max(0.0, min(1.0, raw))
-                // Quantize to `levels` discrete steps
-                let stepped = floor(clamped * Double(levels)) / Double(levels)
-                return CGGammaValue(stepped)
-            }
-
-            redTable[i]   = tableValue(lo: p.rLo, hi: p.rHi, gam: p.rGam)
-            greenTable[i] = tableValue(lo: p.gLo, hi: p.gHi, gam: p.gGam)
-            blueTable[i]  = tableValue(lo: p.bLo, hi: p.bHi, gam: p.bGam)
-        }
-
-        CGSetDisplayTransferByTable(displayID, UInt32(capacity),
-                                    &redTable, &greenTable, &blueTable)
     }
 }

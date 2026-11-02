@@ -33,10 +33,7 @@ struct MainDisplayView: View {
                 .contentShape(Rectangle())
                 .onTapGesture {
                     Task { @MainActor in
-                        let success = await ArrangementService.shared.setAsMainDisplay(
-                            display.displayID,
-                            among: displayManager.displays
-                        )
+                        let success = await displayManager.setAsMainDisplay(display)
                         if !success {
                             errorMessage = String(localized: "Couldn’t set the main display")
                             Task { @MainActor in

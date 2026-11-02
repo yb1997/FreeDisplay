@@ -172,13 +172,16 @@ final class PresetService: ObservableObject, @unchecked Sendable {
     /// Returns the preset ID that matches the current display state, if any.
     func currentPresetMatch() -> UUID? {
         let displays = DisplayManagerAccessor.shared.displays
-        for preset in presets {
+        // User presets first: when a built-in preset matches too, show the user's as current.
+        let ordered = presets.filter { !$0.isBuiltin } + presets.filter { $0.isBuiltin }
+        for preset in ordered {
             let matches = preset.displays.allSatisfy { entry in
                 guard let display = displays.first(where: { $0.displayUUID == entry.displayUUID }),
                       display.isOnline else { return false }
                 let mode = display.currentDisplayMode
-                let modeMatch = mode?.width == entry.width && mode?.height == entry.height
-                return modeMatch
+                // HiDPI counts: "Native" and "HiDPI" can share the same width × height.
+                return mode?.width == entry.width && mode?.height == entry.height
+                    && mode?.isHiDPI == entry.isHiDPI
             }
             if matches && !preset.displays.isEmpty { return preset.id }
         }
@@ -199,7 +202,7 @@ final class PresetService: ObservableObject, @unchecked Sendable {
         let externals = DisplayManagerAccessor.shared.displays.filter { $0.isOnline && !$0.isBuiltin }
         guard !externals.isEmpty else { return [] }
 
-        // --- 原生模式 ---
+        // --- Native Mode ---
         let nativeEntries: [DisplayPresetEntry] = externals.map { display in
             let nativeMode: DisplayMode? = display.availableModes
                 .filter { !$0.isHiDPI }
@@ -226,7 +229,7 @@ final class PresetService: ObservableObject, @unchecked Sendable {
 
         var result: [DisplayPreset] = [nativePreset]
 
-        // --- HiDPI 模式 ---
+        // --- HiDPI Mode ---
         // Find the best HiDPI mode for each external display (highest logical resolution)
         let hasExternalWithHiDPI = externals.contains { display in
             display.availableModes.contains { $0.isHiDPI }

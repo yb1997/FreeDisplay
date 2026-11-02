@@ -29,35 +29,19 @@ class ArrangementService {
         }
     }
 
-    /// Makes the target display the main display by moving it to origin (0, 0).
-    /// Moves the current main display to the position previously occupied by the target.
-    /// The entire Begin→Origin→Complete transaction runs inside `CGHelpers.runWithTimeout`
-    /// so `CGCompleteDisplayConfiguration` cannot block indefinitely on WindowServer IPC.
+    /// Moves several displays in ONE configuration transaction, so macOS never sees a
+    /// half-moved layout (which it would "fix" by shoving displays around).
     /// - Returns: true if the configuration was applied successfully.
     @discardableResult
-    func setAsMainDisplay(_ targetID: CGDirectDisplayID, among displays: [DisplayInfo]) async -> Bool {
-        guard let target = displays.first(where: { $0.displayID == targetID }),
-              let currentMain = displays.first(where: { $0.isMain }),
-              currentMain.displayID != targetID else {
-            return false
-        }
-
-        // Capture value types only — no OpaquePointer crossing the @Sendable boundary.
-        let targetOriginX = Int32(target.bounds.origin.x)
-        let targetOriginY = Int32(target.bounds.origin.y)
-        let currentMainID = currentMain.displayID
-
+    func setOrigins(_ items: [(id: CGDirectDisplayID, x: Int, y: Int)]) async -> Bool {
+        guard !items.isEmpty else { return false }
         return await CGHelpers.runWithTimeout(seconds: 10, fallback: false) {
             var config: CGDisplayConfigRef?
             guard CGBeginDisplayConfiguration(&config) == .success,
                   let cfg = config else { return false }
-
-            // Move target to origin → it becomes the new main display
-            CGConfigureDisplayOrigin(cfg, targetID, 0, 0)
-
-            // Move old main to where the target was.
-            CGConfigureDisplayOrigin(cfg, currentMainID, targetOriginX, targetOriginY)
-
+            for item in items {
+                CGConfigureDisplayOrigin(cfg, item.id, Int32(item.x), Int32(item.y))
+            }
             let result = CGCompleteDisplayConfiguration(cfg, .forSession)
             if result != .success {
                 CGCancelDisplayConfiguration(cfg)
@@ -65,5 +49,30 @@ class ArrangementService {
             }
             return true
         }
+    }
+
+    /// Makes the target display the main display by shifting EVERY display by
+    /// -target.origin, so the target lands at (0, 0) and the layout keeps its shape.
+    /// (Swapping only the target and the old main mirrored a two-display layout and
+    /// left a third display behind.) Reads live bounds rather than cached DisplayInfo values.
+    /// - Returns: true if the configuration was applied successfully.
+    @discardableResult
+    func setAsMainDisplay(_ targetID: CGDirectDisplayID) async -> Bool {
+        guard CGDisplayIsMain(targetID) == 0 else { return false }
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &count)
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetActiveDisplayList(count, &ids, &count)
+        guard ids.contains(targetID) else { return false }
+
+        let targetOrigin = CGDisplayBounds(targetID).origin
+        // A mirror set moves with its primary; configuring its members separately fails.
+        let items = ids
+            .filter { CGDisplayMirrorsDisplay($0) == kCGNullDirectDisplay }
+            .map { id -> (id: CGDirectDisplayID, x: Int, y: Int) in
+                let origin = CGDisplayBounds(id).origin
+                return (id: id, x: Int(origin.x - targetOrigin.x), y: Int(origin.y - targetOrigin.y))
+            }
+        return await setOrigins(items)
     }
 }
