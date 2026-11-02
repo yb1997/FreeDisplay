@@ -46,6 +46,7 @@
 		DEFA538D0EED4A16A0DC987D /* NSScreenExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59F1FD9EEC72051EBC3473C1 /* NSScreenExtension.swift */; };
 		E061011F318208D7FF94D963 /* CGHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5BF8AFF876572E97D370A0 /* CGHelpers.swift */; };
 		E201AC4CE5BCEC009C926206 /* ArrangementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22030BFC8A680A596A5764C9 /* ArrangementService.swift */; };
+		E2EC3D877DCC62042FDD8292 /* UpdateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F021E42CB6A0D98585E59A2 /* UpdateInstaller.swift */; };
 		E6D99B12980703693C61A687 /* SettingsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5483CA367C0673369C00E5A /* SettingsService.swift */; };
 		F9A1FF13C0CAC41003C5B201 /* SavePresetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58474F9C406F992241963112 /* SavePresetView.swift */; };
 		FE0FA160B19EA273B4F766CC /* BrightnessSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76D8EE5271581552ED081AF /* BrightnessSliderView.swift */; };
@@ -63,6 +64,7 @@
 		3739D4F9F8A958DE959C133E /* NotchOverlayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayManager.swift; sourceTree = "<group>"; };
 		3B6EC27CA822E1D2F38769E0 /* FreeDisplay.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FreeDisplay.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4720147B44C6328686440A16 /* MainDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainDisplayView.swift; sourceTree = "<group>"; };
+		4F021E42CB6A0D98585E59A2 /* UpdateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateInstaller.swift; sourceTree = "<group>"; };
 		4F6823DA8C05CB0B6070AA74 /* ColorProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorProfileService.swift; sourceTree = "<group>"; };
 		58474F9C406F992241963112 /* SavePresetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavePresetView.swift; sourceTree = "<group>"; };
 		598AEDB5733E6B0E108E9EB5 /* AutoBrightnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoBrightnessView.swift; sourceTree = "<group>"; };
@@ -154,6 +156,7 @@
 				C76FBEDC2A57F5FBBEE11AA0 /* PresetService.swift */,
 				6E6D1243B91C455CE17BE1DF /* ResolutionService.swift */,
 				E5483CA367C0673369C00E5A /* SettingsService.swift */,
+				4F021E42CB6A0D98585E59A2 /* UpdateInstaller.swift */,
 				63BF0C6897ED7891956F2715 /* UpdateService.swift */,
 				F606C5D467CD44404890F6EC /* VirtualDisplayService.swift */,
 			);
@@ -334,6 +337,7 @@
 				8020688F9F08D4F744D00974 /* ResolutionService.swift in Sources */,
 				F9A1FF13C0CAC41003C5B201 /* SavePresetView.swift in Sources */,
 				E6D99B12980703693C61A687 /* SettingsService.swift in Sources */,
+				E2EC3D877DCC62042FDD8292 /* UpdateInstaller.swift in Sources */,
 				63E0F610C2DB27B05C23D665 /* UpdateService.swift in Sources */,
 				07A41793B3F3304722147F19 /* VirtualDisplayService.swift in Sources */,
 				7D929741C0EE81D5B0418538 /* VirtualDisplayView.swift in Sources */,

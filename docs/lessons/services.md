@@ -111,3 +111,10 @@
 - **Lesson**: when a `savePrefs()` writes several keys, never let it run in the middle of `loadPrefs()`
 - **Date**: 2026-11-02
 
+### L-038: Self-updating without Sparkle: pin the running app's designated requirement
+- **Context**: releases are signed with the self-signed "FreeDisplay Local" certificate and not notarized; the project allows no third-party dependencies
+- **Solution**: UpdateInstaller checks the downloaded app with `SecStaticCodeCheckValidity` (strict, nested code, all architectures) against `SecCodeCopyDesignatedRequirement` of the RUNNING app (`identifier "com.freedisplay.app" and certificate leaf = H"…"`), and reads the version from the new app's own Info.plist. It refuses when the running copy is ad-hoc signed (its requirement is a cdhash), translocated or on a read-only volume. A file downloaded by the app itself gets no quarantine attribute, so no Gatekeeper prompt after updating
+- **Testing**: `#if DEBUG` hooks only (`-FDTestInstallUpdate`, `FD_UPDATE_TEST_DMG=file://…`), run from a scratch folder outside /Applications with `MARKETING_VERSION` overridden; never publish a throwaway release (it becomes everyone's Latest)
+- **Lesson**: the updater only helps from the first release that contains it; earlier users update by hand once
+- **Date**: 2026-11-02
+

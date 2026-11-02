@@ -33,6 +33,7 @@ and provide high-level APIs to Views/ViewModels.
 | NotchOverlayManager.swift | Notch overlay |
 | SettingsService.swift | UserDefaults persistence |
 | UpdateService.swift | App update checking |
+| UpdateInstaller.swift | Downloads, verifies (designated requirement + newer version) and installs updates, then relaunches |
 | LaunchService.swift | Launch at login |
 | CGHelpers.swift | Timeout wrapper for blocking CG calls |
 

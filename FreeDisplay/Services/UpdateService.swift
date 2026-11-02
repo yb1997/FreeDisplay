@@ -17,6 +17,9 @@ final class UpdateService: ObservableObject, @unchecked Sendable {
 
     @Published var latestVersion: String? = nil
     @Published var releaseURL: URL? = nil
+    /// The release's FreeDisplay.dmg download, used by UpdateInstaller. nil when the release
+    /// has no DMG attached (then only the release page can be offered).
+    @Published var updateDMGURL: URL? = nil
     @Published var isChecking: Bool = false
     @Published var hasUpdate: Bool = false
     @Published var lastCheckDate: Date? = nil
@@ -69,7 +72,12 @@ final class UpdateService: ObservableObject, @unchecked Sendable {
                 let clean = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
                 latestVersion = clean
                 releaseURL = (json?["html_url"] as? String).flatMap { URL(string: $0) }
-                hasUpdate = isNewerVersion(clean, than: currentVersion)
+                let assets = json?["assets"] as? [[String: Any]] ?? []
+                updateDMGURL = assets
+                    .first { ($0["name"] as? String)?.lowercased().hasSuffix(".dmg") == true }
+                    .flatMap { $0["browser_download_url"] as? String }
+                    .flatMap { URL(string: $0) }
+                hasUpdate = Self.isNewerVersion(clean, than: currentVersion)
             } else {
                 lastCheckFailed = true
             }
@@ -83,7 +91,7 @@ final class UpdateService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Version Comparison
 
-    private func isNewerVersion(_ remote: String, than local: String) -> Bool {
+    nonisolated static func isNewerVersion(_ remote: String, than local: String) -> Bool {
         let remoteComponents = remote.split(separator: ".").compactMap { Int($0) }
         let localComponents  = local.split(separator: ".").compactMap { Int($0) }
         let length = max(remoteComponents.count, localComponents.count)

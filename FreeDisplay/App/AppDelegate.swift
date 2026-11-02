@@ -21,6 +21,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         _ = AutoBrightnessService.shared
 
         // Wake re-apply (brightness, gamma, resolution) is handled by DisplayManager.
+
+        #if DEBUG
+        // Test hook for the updater (never in Release builds): launch with
+        // `-FDTestInstallUpdate` to check and install right away; set FD_UPDATE_TEST_DMG to a
+        // file:// URL to install a local DMG instead of the release's.
+        if ProcessInfo.processInfo.arguments.contains("-FDTestInstallUpdate") {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                await UpdateService.shared.checkForUpdates(force: true)
+                let override = ProcessInfo.processInfo.environment["FD_UPDATE_TEST_DMG"].flatMap { URL(string: $0) }
+                guard let dmg = override ?? UpdateService.shared.updateDMGURL else {
+                    print("[UpdateInstaller] test: no DMG URL")
+                    return
+                }
+                await UpdateInstaller.shared.install(from: dmg)
+            }
+        }
+        #endif
     }
 
     func applicationWillTerminate(_ notification: Notification) {

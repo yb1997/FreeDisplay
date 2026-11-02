@@ -467,6 +467,7 @@ struct SettingsView: View {
 /// "Check for Updates" button with the result of the last check underneath.
 private struct CheckForUpdatesRow: View {
     @ObservedObject private var updateService = UpdateService.shared
+    @ObservedObject private var installer = UpdateInstaller.shared
     @State private var isHovered = false
     /// Only show "up to date" / errors after the user asked, not after the quiet launch check.
     @State private var didCheckManually = false
@@ -481,14 +482,27 @@ private struct CheckForUpdatesRow: View {
                 if let status = statusText {
                     Text(status)
                         .font(.caption2)
-                        .foregroundColor(updateService.hasUpdate ? .green
-                                         : (updateService.lastCheckFailed ? .red : .secondary))
+                        .foregroundColor(statusColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if case .downloading(let fraction) = installer.state {
+                    ProgressView(value: fraction)
+                        .controlSize(.small)
                 }
             }
             Spacer()
-            if updateService.isChecking {
+            if updateService.isChecking || installer.isBusy {
                 ProgressView().controlSize(.small)
             } else if updateService.hasUpdate {
+                if canInstall {
+                    Button("Install") {
+                        guard let dmg = updateService.updateDMGURL else { return }
+                        Task { await UpdateInstaller.shared.install(from: dmg) }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("Download and install the new version, then restart FreeDisplay")
+                }
                 Button("Download") { updateService.openReleasePage() }
                     .buttonStyle(.borderless)
                     .font(.caption)
@@ -501,7 +515,7 @@ private struct CheckForUpdatesRow: View {
         .onHover { isHovered = $0 }
         .contentShape(Rectangle())
         .onTapGesture {
-            guard !updateService.isChecking else { return }
+            guard !updateService.isChecking, !installer.isBusy else { return }
             didCheckManually = true
             Task { await updateService.checkForUpdates(force: true) }
         }
@@ -509,8 +523,32 @@ private struct CheckForUpdatesRow: View {
         .help("Check GitHub for a newer version of FreeDisplay")
     }
 
+    /// Installing in place needs the release's DMG and a copy that's allowed to replace itself.
+    private var canInstall: Bool {
+        updateService.updateDMGURL != nil && installer.unavailableReason == nil
+    }
+
+    private var statusColor: Color {
+        if case .failed = installer.state { return .red }
+        if updateService.hasUpdate { return canInstall || updateService.updateDMGURL == nil ? .green : .secondary }
+        return updateService.lastCheckFailed ? .red : .secondary
+    }
+
     private var statusText: String? {
+        switch installer.state {
+        case .downloading(let fraction):
+            return String(localized: "Downloading update… \(Int(fraction * 100))%")
+        case .verifying: return String(localized: "Checking the update…")
+        case .installing: return String(localized: "Installing…")
+        case .relaunching: return String(localized: "Restarting FreeDisplay…")
+        case .failed(let message): return message
+        case .idle: break
+        }
         if updateService.isChecking { return String(localized: "Checking…") }
+        if updateService.hasUpdate, updateService.updateDMGURL != nil,
+           let reason = installer.unavailableReason {
+            return reason
+        }
         if updateService.hasUpdate, let latest = updateService.latestVersion {
             return String(localized: "Version \(latest) is available")
         }

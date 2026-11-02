@@ -9,7 +9,7 @@
 | IOKit / DDC / rotation / ambient light / display matching / Apple Silicon | [iokit.md](iokit.md) | L-003, L-004, L-005, L-033, L-035 + general entries |
 | CoreGraphics / HiDPI / CGVirtualDisplay | [coregraphics.md](coregraphics.md) | L-006, L-007, L-020 ~ L-027, L-030, L-031, L-036, L-037 + general entries |
 | SwiftUI / MenuBarExtra / UI animation / DDC cache / performance / localization | [swiftui.md](swiftui.md) | L-032 + general entries |
-| Cross-Service coordination / concurrency / resource management / signing and permissions | [services.md](services.md) | L-008 ~ L-019, L-028, L-029, L-034 |
+| Cross-Service coordination / concurrency / resource management / signing and permissions | [services.md](services.md) | L-008 ~ L-019, L-028, L-029, L-034, L-038 |
 | Xcode build / phase wrap-up | [build.md](build.md) | General entries |
 
 ## Permanent rules (frequent pitfalls)
