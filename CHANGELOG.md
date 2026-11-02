@@ -4,6 +4,18 @@ All notable changes to FreeDisplay are documented here.
 
 ---
 
+## v1.2.3 (2026-11-02)
+
+### Fixes
+
+- **Built-in display brightness slider stays in sync**: changing the MacBook screen's brightness with the brightness keys, or letting macOS adjust it automatically, now moves FreeDisplay's slider too. Key presses show up right away while the menu is open; automatic changes within a second or two. The slider also no longer shows 1% less than the system's value.
+
+### Notes
+
+- Same install note as v1.1.0: the app isn't notarized; on first launch use **System Settings → Privacy & Security → Open Anyway**.
+
+---
+
 ## v1.2.2 (2026-11-02)
 
 ### Improvements
