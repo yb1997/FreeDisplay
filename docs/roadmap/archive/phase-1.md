@@ -1,51 +1,51 @@
-# Phase 1: 显示器检测与菜单 UI ✅
+# Phase 1: Display detection and menu UI ✅
 
-> 核心价值：列出所有连接的显示器，展示基本信息，建立 UI 框架
+> Core value: list every connected display, show basic info, and establish the UI framework
 
-## 任务列表
+## Task list
 
-- [x] 实现 `DisplayInfo` 模型 (`FreeDisplay/Models/DisplayInfo.swift`)
-  - 实现提示：属性包括 `displayID: CGDirectDisplayID`、`name: String`、
-    `isBuiltin: Bool`、`isMain: Bool`、`isOnline: Bool`、`vendorNumber: UInt32`、
-    `modelNumber: UInt32`、`serialNumber: UInt32`、`bounds: CGRect`、
-    `pixelWidth: Int`、`pixelHeight: Int`、`rotation: Double`。
-    用 `CGDisplayIsBuiltin()` / `CGDisplayIsMain()` 等 CG 函数获取。
-    显示器名称通过 `IODisplayCreateInfoDictionary` 的 `kDisplayProductName` 获取。
-  - 验证：能正确识别内建显示屏和 H2435Q 外接显示器名称
+- [x] Implement the `DisplayInfo` model (`FreeDisplay/Models/DisplayInfo.swift`)
+  - Implementation hint: properties include `displayID: CGDirectDisplayID`, `name: String`,
+    `isBuiltin: Bool`, `isMain: Bool`, `isOnline: Bool`, `vendorNumber: UInt32`,
+    `modelNumber: UInt32`, `serialNumber: UInt32`, `bounds: CGRect`,
+    `pixelWidth: Int`, `pixelHeight: Int`, `rotation: Double`.
+    Get them with CG functions such as `CGDisplayIsBuiltin()` / `CGDisplayIsMain()`.
+    Get the display name from `kDisplayProductName` in `IODisplayCreateInfoDictionary`.
+  - Verification: correctly identifies the names of the built-in display and the H2435Q external display
 
-- [x] 实现 `DisplayManager` 检测逻辑 (`FreeDisplay/Services/DisplayManager.swift`)
-  - 实现提示：`@Published var displays: [DisplayInfo]`。
-    用 `CGGetOnlineDisplayList(16, &displayIDs, &count)` 获取所有在线显示器。
-    监听 `CGDisplayRegisterReconfigurationCallback` 在显示器热插拔时自动刷新。
-    启动时调用一次扫描。
-  - 验证：插拔显示器时列表自动更新
+- [x] Implement the `DisplayManager` detection logic (`FreeDisplay/Services/DisplayManager.swift`)
+  - Implementation hint: `@Published var displays: [DisplayInfo]`.
+    Get every online display with `CGGetOnlineDisplayList(16, &displayIDs, &count)`.
+    Listen with `CGDisplayRegisterReconfigurationCallback` to refresh automatically when displays are hot-plugged.
+    Scan once at launch.
+  - Verification: the list updates automatically when a display is plugged in or unplugged
 
-- [x] 实现菜单栏主视图 (`FreeDisplay/Views/MenuBarView.swift`)
-  - 实现提示：垂直 ScrollView，顶部是显示器列表（每个显示器一行，含名称 + 开关 Toggle），
-    仿照 BetterDisplay 截图的布局：显示器名称在左，Toggle 开关在右。
-    内建显示屏名称后加 Ⓜ 标记表示主显示器。
-    使用 `@EnvironmentObject var displayManager: DisplayManager`。
-    底部放"工具"分区和"退出 FreeDisplay"按钮。
-  - 验证：菜单显示 H2435Q 和内建显示屏两行
+- [x] Implement the main menu bar view (`FreeDisplay/Views/MenuBarView.swift`)
+  - Implementation hint: a vertical ScrollView with the display list at the top (one row per display, with the name + an on/off Toggle),
+    modeled on the layout in the BetterDisplay screenshots: display name on the left, Toggle switch on the right.
+    Add an Ⓜ mark after the built-in display's name to indicate the main display.
+    Use `@EnvironmentObject var displayManager: DisplayManager`.
+    Put a "Tools" section and a "Quit FreeDisplay" button at the bottom.
+  - Verification: the menu shows two rows, for the H2435Q and the built-in display
 
-- [x] 实现显示器详情展开区 (`FreeDisplay/Views/DisplayDetailView.swift`)
-  - 实现提示：点击显示器行展开详情，使用 `DisclosureGroup` 或自定义展开动画。
-    展开后显示功能列表（亮度、分辨率等），每个功能一个 section header。
-    Phase 1 先放占位文本，后续 Phase 逐步实现。
-    参照 BetterDisplay 截图的 section 列表样式（蓝色图标 + 文字 + 右箭头）。
-  - 验证：点击显示器行展开，显示功能 section 列表
+- [x] Implement the display detail expansion area (`FreeDisplay/Views/DisplayDetailView.swift`)
+  - Implementation hint: clicking a display row expands its details, using a `DisclosureGroup` or a custom expand animation.
+    When expanded, show the feature list (brightness, resolution, etc.), with a section header for each feature.
+    In Phase 1, put placeholder text first; later phases implement them one by one.
+    Follow the section list style in the BetterDisplay screenshots (blue icon + text + right arrow).
+  - Verification: clicking a display row expands it and shows the list of feature sections
 
-- [x] 显示器开关功能 (`FreeDisplay/Services/DisplayManager.swift`)
-  - 实现提示：Toggle 控制显示器开关。外接显示器使用 DDC VCP code 0xD6 (Power Mode)
-    发送 standby 命令。内建显示器使用 `IORegistryEntrySetCFProperty` 设置亮度为 0。
-    注意：完整的 DDC 通信在 Phase 2 实现，此处可先用 `CGDisplayCapture` / `CGDisplayRelease` 模拟。
-  - 验证：Toggle 关闭外接显示器时屏幕变黑
+- [x] Display on/off feature (`FreeDisplay/Services/DisplayManager.swift`)
+  - Implementation hint: a Toggle turns the display on/off. External displays use DDC VCP code 0xD6 (Power Mode)
+    to send a standby command. The built-in display uses `IORegistryEntrySetCFProperty` to set brightness to 0.
+    Note: full DDC communication is implemented in Phase 2; for now this can be simulated with `CGDisplayCapture` / `CGDisplayRelease`.
+  - Verification: turning the Toggle off for the external display makes its screen go black
 
-## Phase 验收
+## Phase acceptance
 
-- 编译运行后菜单栏图标点击弹出面板
-- 面板显示所有连接的显示器（名称正确）
-- 显示器行可展开，展示功能 section 占位列表
-- 底部有"退出 FreeDisplay"按钮且可用
+- After building and running, clicking the menu bar icon opens the panel
+- The panel shows every connected display (with correct names)
+- Display rows can be expanded to show the placeholder list of feature sections
+- There's a working "Quit FreeDisplay" button at the bottom
 
-**完成后**: 建议运行 project-optimize 反思
+**When done**: running project-optimize to reflect is recommended

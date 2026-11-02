@@ -1,12 +1,12 @@
-# Phase 10: 虚拟显示器 ✅
+# Phase 10: Virtual displays ✅
 
-> 核心价值：创建 dummy display / 虚拟屏幕，扩展 HiDPI 支持
+> Core value: create dummy displays / virtual screens, and extend HiDPI support
 
-## 任务列表
+## Task list
 
-- [x] 实现虚拟显示器创建 (`FreeDisplay/Services/VirtualDisplayService.swift`)
-  - 实现提示：
-    使用 macOS 14+ 的 `CGVirtualDisplay` API：
+- [x] Implement virtual display creation (`FreeDisplay/Services/VirtualDisplayService.swift`)
+  - Implementation hints:
+    Use the `CGVirtualDisplay` API on macOS 14+:
     ```swift
     import CoreGraphics
 
@@ -22,54 +22,54 @@
 
     let display = CGVirtualDisplay(descriptor: descriptor)
 
-    // 添加显示模式
+    // Add display modes
     let settings = CGVirtualDisplaySettings()
-    settings.hiDPI = 1  // 启用 HiDPI
+    settings.hiDPI = 1  // enable HiDPI
     let mode = CGVirtualDisplayMode(width: 1920, height: 1080, refreshRate: 60)
     settings.modes = [mode, ...]
     display?.applySettings(settings)
     ```
-    功能：
-    - 创建虚拟显示器（指定名称、分辨率、DPI）
-    - 销毁虚拟显示器
-    - 列出当前活跃的虚拟显示器
-    - 持久化配置（UserDefaults/JSON），启动时自动创建
-    注意：虚拟显示器创建后系统会将其视为真实显示器，可用于 HiDPI 和 Sidecar 场景。
-  - 验证：创建虚拟显示器后系统设置中出现新的显示器
+    Features:
+    - Create a virtual display (with a given name, resolution, and DPI)
+    - Destroy a virtual display
+    - List the currently active virtual displays
+    - Persist the configuration (UserDefaults/JSON) and create them automatically at launch
+    Note: once a virtual display is created, the system treats it as a real display, so it can be used for HiDPI and Sidecar scenarios.
+  - Verification: after creating a virtual display, a new display appears in System Settings
 
-- [x] 实现 HiDPI 增强（基于虚拟显示器）(`HiDPIService` 扩展)
-  - 实现提示：
-    Phase 3 中通过 plist override 实现 HiDPI，此处用虚拟显示器方案增强：
-    1. 创建与外接显示器分辨率匹配的虚拟显示器（启用 HiDPI）
-    2. 将外接显示器镜像到虚拟显示器
-    3. 外接显示器继承虚拟显示器的 HiDPI 模式
-    这是 BetterDisplay 实现 HiDPI 的核心方式——不需要修改系统文件，不需要 SIP。
-    在 ResolutionService 中增加"高分辨率 (HiDPI)"开关，开启时自动创建配对虚拟显示器。
-  - 验证：外接显示器开启 HiDPI 后分辨率列表出现缩放模式
+- [x] Implement HiDPI enhancement (based on virtual displays) (`HiDPIService` extension)
+  - Implementation hints:
+    Phase 3 implemented HiDPI with a plist override; here, enhance it with the virtual display approach:
+    1. Create a virtual display that matches the external display's resolution (with HiDPI enabled)
+    2. Mirror the external display to the virtual display
+    3. The external display inherits the virtual display's HiDPI modes
+    This is the core of how BetterDisplay implements HiDPI — no system files to modify, no SIP needed.
+    Add a "High Resolution (HiDPI)" toggle to ResolutionService that automatically creates the paired virtual display when turned on.
+  - Verification: after turning on HiDPI for the external display, scaled modes appear in the resolution list
 
-- [x] 实现虚拟显示器管理 UI (`FreeDisplay/Views/VirtualDisplayView.swift`)
-  - 实现提示：
-    在"工具"区域添加"显示器和虚拟屏幕"入口（仿截图）。
-    点击打开管理面板/窗口：
-    - 当前虚拟显示器列表（名称、分辨率、状态）
-    - "+"按钮添加新虚拟显示器（弹出配置表单：名称、分辨率、DPI）
-    - 每行有删除按钮
-    - 配置持久化选项（下次启动自动创建）
-  - 验证：创建/删除虚拟显示器的全流程正常
+- [x] Implement the virtual display management UI (`FreeDisplay/Views/VirtualDisplayView.swift`)
+  - Implementation hints:
+    Add a "Displays and Virtual Screens" entry point to the "Tools" area (modeled on the screenshots).
+    Clicking it opens a management panel/window:
+    - The list of current virtual displays (name, resolution, status)
+    - A "+" button to add a new virtual display (opens a configuration form: name, resolution, DPI)
+    - A delete button on each row
+    - A persistence option (create automatically on next launch)
+  - Verification: the full flow of creating/deleting virtual displays works
 
-- [x] 实现"高分辨率 (HiDPI)"一键开关 UI
-  - 实现提示：
-    在每个显示器的菜单区域添加"高分辨率 (HiDPI)"行（蓝色⊕图标），仿截图。
-    开关 Toggle 控制：开启时自动创建配对虚拟显示器并镜像，
-    关闭时销毁虚拟显示器并取消镜像。
-    状态持久化到 UserDefaults。
-  - 验证：开启 HiDPI 后外接显示器分辨率列表变化
+- [x] Implement the one-click "High Resolution (HiDPI)" toggle UI
+  - Implementation hints:
+    Add a "High Resolution (HiDPI)" row (blue ⊕ icon) to each display's menu area, modeled on the screenshots.
+    The Toggle controls it: when turned on, it automatically creates the paired virtual display and mirrors it;
+    when turned off, it destroys the virtual display and cancels the mirroring.
+    The state is persisted to UserDefaults.
+  - Verification: after turning on HiDPI, the external display's resolution list changes
 
-## Phase 验收
+## Phase acceptance
 
-- 虚拟显示器创建/销毁正常
-- HiDPI 通过虚拟显示器方案生效
-- 虚拟显示器管理 UI 完整
-- 配置持久化工作（重启后恢复）
+- Virtual display creation/destruction works
+- HiDPI takes effect through the virtual display approach
+- The virtual display management UI is complete
+- Configuration persistence works (restored after restart)
 
-**完成后**: 建议运行 project-optimize 反思
+**When done**: running project-optimize to reflect is recommended

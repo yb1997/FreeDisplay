@@ -1,38 +1,38 @@
-# Phase 13: 关键 Bug 修复
+# Phase 13: Critical bug fixes
 
-> 目标：修复用户反馈的三个功能性 Bug
+> Goal: fix three functional bugs reported by the user
 
-## 任务列表
+## Task list
 
-- [x] 修复图像调整关闭后的残影问题
-  - 实现提示：
-    1. `ImageAdjustmentView.swift` 添加 `.onDisappear`：检查所有滑块是否在零位，如果不是则调用 `GammaService.shared.restoreColorSync()`
-    2. `GammaService.swift` 的 `init()` 中注册 `NSApplication.willTerminateNotification` 观察者，回调里调用 `CGDisplayRestoreColorSyncSettings()`
-    3. `AppDelegate.swift` 的 `applicationWillTerminate` 里也加一道保险：`CGDisplayRestoreColorSyncSettings()`
-    4. 考虑添加 `saveState()` / `restoreState()` 方法到 GammaService，在 onDisappear 时保存当前调整值到 UserDefaults，onAppear 时恢复（这样关闭面板不丢设置，但 app 退出时完全清理）
-  - 验证：调整伽马值 → 收起图像调整面板 → 屏幕恢复正常；强制退出 app → 屏幕恢复正常
+- [x] Fix the lingering image after image adjustments are closed
+  - Implementation hints:
+    1. Add `.onDisappear` to `ImageAdjustmentView.swift`: check whether every slider is at zero, and if not, call `GammaService.shared.restoreColorSync()`
+    2. In the `init()` of `GammaService.swift`, register an observer for `NSApplication.willTerminateNotification` whose callback calls `CGDisplayRestoreColorSyncSettings()`
+    3. Add a backup in `applicationWillTerminate` of `AppDelegate.swift` as well: `CGDisplayRestoreColorSyncSettings()`
+    4. Consider adding `saveState()` / `restoreState()` methods to GammaService that save the current adjustment values to UserDefaults in onDisappear and restore them in onAppear (so closing the panel doesn't lose the settings, but quitting the app cleans up completely)
+  - Verification: adjust the gamma → collapse the image adjustments panel → the screen returns to normal; force-quit the app → the screen returns to normal
 
-- [x] 修复 1920x1080 分辨率无法点击的问题
-  - 实现提示：
-    1. `DisplayModeListView.swift` 的 `switchTo()` 方法：去掉 `mode.id != display.currentDisplayMode?.id` 的静默 guard，改为：如果是当前模式，显示"已是当前模式"提示（用 `withAnimation` 闪一下高亮）
-    2. 将 `ResolutionService.shared.setDisplayMode()` 调用改为 `Task { @MainActor in }`，在调用前设 `isSwitching = true`，await 完成后设 `isSwitching = false`
-    3. `ResolutionService.swift` 的 `setDisplayMode` 改为 `async` 方法，内部用 `withCheckedContinuation` 包装 `CGConfigureDisplayWithDisplayMode` + `CGCompleteDisplayConfiguration`
-    4. 添加失败反馈：如果 `setDisplayMode` 返回 false，显示错误提示
-  - 验证：点击 1920x1080 → 显示 loading → 切换成功或显示错误信息；点击已是当前的模式 → 显示"已是当前模式"
+- [x] Fix the 1920x1080 resolution not being clickable
+  - Implementation hints:
+    1. In the `switchTo()` method of `DisplayModeListView.swift`: remove the silent `mode.id != display.currentDisplayMode?.id` guard, and instead, if it's the current mode, show an "Already the current mode" hint (flash the highlight with `withAnimation`)
+    2. Change the `ResolutionService.shared.setDisplayMode()` call to `Task { @MainActor in }`, setting `isSwitching = true` before the call and `isSwitching = false` after the await completes
+    3. Change `setDisplayMode` in `ResolutionService.swift` to an `async` method that wraps `CGConfigureDisplayWithDisplayMode` + `CGCompleteDisplayConfiguration` in `withCheckedContinuation`
+    4. Add failure feedback: if `setDisplayMode` returns false, show an error hint
+  - Verification: click 1920x1080 → loading shows → it switches successfully or shows an error message; click the mode that's already current → "Already the current mode" shows
 
-- [x] 修复 HiDPI 缩放模式不显示/需要重连的问题
-  - 实现提示：
-    1. `HiDPIService.swift` 的 `enableHiDPI()` 完成 plist 写入后，调用 `CGDisplayForceToMirror(displayID, 0)` 再 `CGDisplayForceToMirror(displayID, kCGNullDirectDisplay)` 来触发显示器重新枚举模式（参考 BetterDisplay 的做法）
-    2. 如果上面的方法不可用，备选方案：用 `IOServiceRequestProbe` 通知 IOKit 重新扫描
-    3. 刷新后调用 `DisplayMode.availableModes(for:)` 重新获取模式列表并更新 `display.availableModes`
-    4. 在 `DisplayModeListView` 添加"刷新模式列表"按钮作为兜底
-  - 验证：点击启用 HiDPI → 模式列表自动刷新，出现新的 HiDPI 缩放分辨率（如 1920x1080 HiDPI）
+- [x] Fix HiDPI scaled modes not showing/requiring a reconnect
+  - Implementation hints:
+    1. After `enableHiDPI()` in `HiDPIService.swift` finishes writing the plist, call `CGDisplayForceToMirror(displayID, 0)` and then `CGDisplayForceToMirror(displayID, kCGNullDirectDisplay)` to make the display re-enumerate its modes (following BetterDisplay's approach)
+    2. If that method isn't available, the alternative: use `IOServiceRequestProbe` to tell IOKit to rescan
+    3. After refreshing, call `DisplayMode.availableModes(for:)` to get the mode list again and update `display.availableModes`
+    4. Add a "Refresh mode list" button to `DisplayModeListView` as a fallback
+  - Verification: click to enable HiDPI → the mode list refreshes automatically and new HiDPI scaled resolutions appear (such as 1920x1080 HiDPI)
 
-- [x] 改进 DisplayMode 的 HiDPI 分类显示
-  - 实现提示：
-    1. `DisplayModeListView.swift` 的分组逻辑：增加"HiDPI 缩放模式"分组，专门展示 `isHiDPI && !isNative` 的模式
-    2. 对于 2K 显示器（如用户的 HKC 2560x1440），HiDPI 缩放模式应该包含：1280x720 HiDPI（原生 2x）、更低分辨率的 HiDPI 模式
-    3. 在每个模式行显示"逻辑分辨率 @ 实际像素密度"信息，帮助用户理解 HiDPI 含义
-  - 验证：模式列表清晰分组显示"默认及原生模式"、"HiDPI 缩放模式"、"其他模式"
+- [x] Improve the HiDPI grouping of DisplayMode
+  - Implementation hints:
+    1. Grouping logic in `DisplayModeListView.swift`: add a "HiDPI scaled modes" group dedicated to modes where `isHiDPI && !isNative`
+    2. For a 2K display (such as the user's HKC 2560x1440), the HiDPI scaled modes should include: 1280x720 HiDPI (native 2x) and lower-resolution HiDPI modes
+    3. Show "logical resolution @ actual pixel density" on each mode row to help users understand what HiDPI means
+  - Verification: the mode list is clearly grouped into "Default and native modes", "HiDPI scaled modes", and "Other modes"
 
-**Phase 验收**: 编译通过 + 以上四个验证场景全部满足
+**Phase acceptance**: builds + all four verification scenarios above are satisfied

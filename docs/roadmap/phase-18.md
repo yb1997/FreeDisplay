@@ -1,52 +1,52 @@
-# Phase 18: 稳定性加固
+# Phase 18: Stability hardening
 
-> 状态: 已完成 | 预计: 中等复杂度
+> Status: Complete | Estimate: medium complexity
 
-## 目标
+## Goal
 
-将 CG 阻塞调用的超时保护模式推广到全项目，确保睡眠/唤醒后 HiDPI 状态自动恢复，显示器配置变更后排列自动重新应用。
+Extend the timeout protection pattern for blocking CG calls across the whole project, make sure HiDPI state is restored automatically after sleep/wake, and reapply the arrangement automatically after display configuration changes.
 
-## 任务
+## Tasks
 
-### Task 1: 统一 CG 阻塞调用超时保护
-- [x] 将 VirtualDisplayService 的 `runWithTimeout` 提取为公共工具函数（放到 `Utilities/` 或 `Services/CGHelpers.swift`）
-- [x] MirrorService: `enableMirror`/`disableMirror` 中的 `CGCompleteDisplayConfiguration` 调用使用 `runWithTimeout` 包裹
-- [x] ArrangementService: `setPosition` 中的 `CGCompleteDisplayConfiguration` 调用使用 `runWithTimeout` 包裹
-- [x] ResolutionService: `applyModeSync` 加 10 秒超时保护（当前无限等待 `CGCompleteDisplayConfiguration`）
+### Task 1: Unified timeout protection for blocking CG calls
+- [x] Extract VirtualDisplayService's `runWithTimeout` into a shared utility function (put it in `Utilities/` or `Services/CGHelpers.swift`)
+- [x] MirrorService: wrap the `CGCompleteDisplayConfiguration` calls in `enableMirror`/`disableMirror` with `runWithTimeout`
+- [x] ArrangementService: wrap the `CGCompleteDisplayConfiguration` call in `setPosition` with `runWithTimeout`
+- [x] ResolutionService: add 10-second timeout protection to `applyModeSync` (it currently waits forever on `CGCompleteDisplayConfiguration`)
 
-**实现提示**: `runWithTimeout` 已在 VirtualDisplayService 中验证有效，直接复用相同模式。注意 `@Sendable` 约束。
+**Implementation hint**: `runWithTimeout` has already been proven in VirtualDisplayService; reuse the same pattern directly. Watch the `@Sendable` constraint.
 
-### Task 2: 显示器配置变更自动重排列
-- [x] 在 AppDelegate 或 DisplayManager 中注册 `CGDisplayRegisterReconfigurationCallback`
-- [x] 回调中检测配置变更完成（`flags` 包含 `beginConfigurationFlag` 后等待不包含的回调）
-- [x] 配置变更完成后延迟 500ms 调用 `displayManager.arrangeExternalAboveBuiltin()`
-- [x] 避免重复触发：用防抖（debounce）机制，500ms 内多次回调只执行最后一次
+### Task 2: Automatic re-arrangement after display configuration changes
+- [x] Register `CGDisplayRegisterReconfigurationCallback` in AppDelegate or DisplayManager
+- [x] In the callback, detect when the configuration change completes (after a callback whose `flags` contain `beginConfigurationFlag`, wait for one that doesn't)
+- [x] After a configuration change completes, call `displayManager.arrangeExternalAboveBuiltin()` after a 500 ms delay
+- [x] Avoid repeated triggers: use a debounce mechanism so multiple callbacks within 500 ms run only the last one
 
-**实现提示**: `CGDisplayRegisterReconfigurationCallback` 的 context 参数用 `Unmanaged.passRetained(self)` 防止野指针（CLAUDE.md 已有规则）。回调在系统线程，需 `DispatchQueue.main.async` 切回主线程。
+**Implementation hint**: Use `Unmanaged.passRetained(self)` for the context parameter of `CGDisplayRegisterReconfigurationCallback` to prevent dangling pointers (CLAUDE.md already has this rule). The callback runs on a system thread, so switch back to the main thread with `DispatchQueue.main.async`.
 
-### Task 3: 睡眠/唤醒后自动恢复 HiDPI
-- [x] 在 AppDelegate 的 `didWakeNotification` 处理中，检查 `VirtualDisplayService.hiDPIActiveDisplayIDs` 是否有活跃会话
-- [x] 如果有，检查虚拟显示器是否还在线（`CGDisplayIsOnline`），如果丢失则重新创建 + 镜像 + 应用分辨率
-- [x] 恢复序列：create → apply settings → sleep 500ms → mirror → sleep 500ms → setDisplayMode → arrangeExternalAboveBuiltin
-- [x] 持久化 HiDPI 状态到 UserDefaults（`fd.hiDPI.activePhysicalIDs`），以便 app 重启后也能恢复
+### Task 3: Automatically restore HiDPI after sleep/wake
+- [x] In AppDelegate's `didWakeNotification` handler, check whether `VirtualDisplayService.hiDPIActiveDisplayIDs` has an active session
+- [x] If it does, check whether the virtual display is still online (`CGDisplayIsOnline`); if it's lost, recreate it + mirror + apply the resolution
+- [x] Restore sequence: create → apply settings → sleep 500 ms → mirror → sleep 500 ms → setDisplayMode → arrangeExternalAboveBuiltin
+- [x] Persist HiDPI state to UserDefaults (`fd.hiDPI.activePhysicalIDs`) so it can also be restored after the app restarts
 
-**实现提示**: 唤醒后 WindowServer 需要时间稳定，整个恢复序列加 2 秒初始延迟。参考 VirtualDisplayService 已有的 `enableHiDPIVirtual` 流程。
+**Implementation hint**: WindowServer needs time to settle after wake, so add a 2-second initial delay to the whole restore sequence. Refer to the existing `enableHiDPIVirtual` flow in VirtualDisplayService.
 
-### Task 4: 错误恢复与用户反馈
-- [x] CG 调用超时时显示菜单栏状态提示（非弹窗，用 `statusMessage` 模式）
-- [x] HiDPI 恢复失败时提示用户手动重新开启
-- [x] 连续失败 3 次后自动禁用 HiDPI 并提示
+### Task 4: Error recovery and user feedback
+- [x] Show a menu bar status hint when a CG call times out (not a popup; use the `statusMessage` pattern)
+- [x] Prompt the user to turn HiDPI back on manually when HiDPI restore fails
+- [x] Automatically disable HiDPI and notify the user after 3 consecutive failures
 
-**实现提示**: 复用 HiDPIVirtualRowView 已有的 `statusMessage` 模式。
+**Implementation hint**: Reuse the existing `statusMessage` pattern from HiDPIVirtualRowView.
 
-## 验收标准
+## Acceptance criteria
 
 ```bash
-# 编译通过
+# Build passes
 xcodebuild -scheme FreeDisplay -configuration Debug build 2>&1 | tail -3
 
-# 手动测试
-# 1. 开启 HiDPI → 合盖睡眠 → 唤醒 → HiDPI 自动恢复 + 排列正确
-# 2. 开启 HiDPI → 拔外接显示器 → 重插 → 无 crash
-# 3. 切换分辨率 → 排列保持正上方
+# Manual testing
+# 1. Turn on HiDPI → close the lid to sleep → wake → HiDPI restores automatically + arrangement is correct
+# 2. Turn on HiDPI → unplug the external display → plug it back in → no crash
+# 3. Switch resolution → arrangement stays directly above
 ```

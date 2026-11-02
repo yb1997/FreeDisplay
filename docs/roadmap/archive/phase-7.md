@@ -1,55 +1,55 @@
-# Phase 7: 显示器高级管理 ✅
+# Phase 7: Advanced display management ✅
 
-> 核心价值：主显示屏切换、刘海管理、集成控制、管理显示器设置
+> Core value: main display switching, notch management, integrated control, and display management settings
 
-## 任务列表
+## Task list
 
-- [x] 实现"设为主显示屏"UI 和逻辑 (`FreeDisplay/Views/MainDisplayView.swift`)
-  - 实现提示：
-    在菜单中添加"设为主显示屏"选项（Ⓜ 图标），仿截图的蓝色 M 圆形图标。
-    逻辑已在 Phase 4 的 ArrangementService 中实现（移到坐标原点）。
-    此处做 UI 层：显示器列表中当前主显示屏旁显示 Ⓜ 标记。
-    点击其他显示器的"设为主显示屏"按钮切换。
-  - 验证：点击后 Dock 和菜单栏移到目标显示器
+- [x] Implement the "Set as Main Display" UI and logic (`FreeDisplay/Views/MainDisplayView.swift`)
+  - Implementation hints:
+    Add a "Set as Main Display" option (Ⓜ icon) to the menu, like the blue circled M icon in the screenshots.
+    The logic is already implemented in Phase 4's ArrangementService (move to the coordinate origin).
+    This task is the UI layer: show an Ⓜ mark next to the current main display in the display list.
+    Clicking another display's "Set as Main Display" button switches to it.
+  - Verification: after clicking, the Dock and menu bar move to the target display
 
-- [x] 实现"显示刘海"管理 (`FreeDisplay/Views/NotchView.swift`)
-  - 实现提示：
-    MacBook 有刘海（notch），影响分辨率和布局。
-    功能：在分辨率列表中标注"刘海"标签（仿截图中的"刘海 60Hz 10bit"）。
-    检测刘海：`NSScreen.safeAreaInsets.top > 0` 或检查设备型号。
-    提供"隐藏刘海"选项：通过在刘海区域覆盖黑色条实现
-    （创建一个 borderless、always-on-top 的黑色 NSWindow，覆盖刘海区域）。
-  - 验证：内建屏分辨率旁正确显示"刘海"标签
+- [x] Implement "display notch" management (`FreeDisplay/Views/NotchView.swift`)
+  - Implementation hints:
+    MacBooks have a notch, which affects resolution and layout.
+    Feature: tag modes in the resolution list with a "notch" label (like the "notch 60Hz 10bit" in the screenshots).
+    Detecting the notch: `NSScreen.safeAreaInsets.top > 0`, or check the device model.
+    Provide a "Hide Notch" option: cover the notch area with a black bar
+    (create a borderless, always-on-top black NSWindow that covers the notch area).
+  - Verification: the "notch" label shows correctly next to the built-in display's resolutions
 
-- [x] 实现"集成控制"(DDC 扩展) (`FreeDisplay/Views/IntegratedControlView.swift`)
-  - 实现提示：
-    可展开的"集成控制"section，仿截图布局：
-    - "从设备读取并更新"按钮：读取所有 DDC VCP code 并刷新 UI
-    - "配置集成控制项..."按钮：弹出配置窗口
-    DDCService 扩展：批量读取常用 VCP codes：
-    0x10(亮度), 0x12(对比度), 0x14(色温选择), 0x16(视频增益R),
-    0x18(视频增益G), 0x1A(视频增益B), 0x60(输入源), 0x62(音量),
-    0x87(色彩饱和度), 0xD6(电源模式), 0xDC(显示模式)
-    结果存储到 DisplayInfo 的 `ddcValues: [UInt8: UInt16]` 字典中。
-  - 验证：点击"从设备读取"后外接显示器的 DDC 参数正确显示
+- [x] Implement "integrated control" (DDC extension) (`FreeDisplay/Views/IntegratedControlView.swift`)
+  - Implementation hints:
+    An expandable "Integrated Control" section, modeled on the screenshot layout:
+    - "Read and Update from Device" button: reads every DDC VCP code and refreshes the UI
+    - "Configure Integrated Control Items..." button: opens a configuration window
+    DDCService extension: read the common VCP codes in bulk:
+    0x10 (brightness), 0x12 (contrast), 0x14 (color temperature preset), 0x16 (video gain R),
+    0x18 (video gain G), 0x1A (video gain B), 0x60 (input source), 0x62 (volume),
+    0x87 (color saturation), 0xD6 (power mode), 0xDC (display mode)
+    Store the results in the `ddcValues: [UInt8: UInt16]` dictionary on DisplayInfo.
+  - Verification: after clicking "Read from Device", the external display's DDC parameters show correctly
 
-- [x] 实现"管理显示器"设置 (`FreeDisplay/Views/ManageDisplayView.swift`)
-  - 实现提示：
-    可展开的"管理显示器"section，仿截图：
-    - "配置显示..."：打开系统偏好设置的显示器面板
+- [x] Implement the "Manage Display" settings (`FreeDisplay/Views/ManageDisplayView.swift`)
+  - Implementation hints:
+    An expandable "Manage Display" section, modeled on the screenshots:
+    - "Configure Display...": opens the Displays pane of System Settings
       `NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Displays-Settings")!)`
-    - "视觉识别"：在目标显示器上弹出全屏标识窗口（显示显示器名称 + ID），
-      3 秒后自动关闭。用 NSWindow + NSScreen 定位到目标显示器。
-    - 提示文本："使用 ⌥ Option + 点击显示菜单标题以快速识别。"
-    - "连接时防止进入睡眠"：使用 `IOPMAssertionCreateWithName` 创建电源断言
-      阻止系统睡眠（`kIOPMAssertionTypePreventSystemSleep`）。
-  - 验证：点击"视觉识别"后目标显示器弹出识别窗口
+    - "Visual Identification": shows a full-screen identification window on the target display (with the display name + ID),
+      which closes automatically after 3 seconds. Position it on the target display with NSWindow + NSScreen.
+    - Hint text: "Use ⌥ Option + click on a display menu title to identify it quickly."
+    - "Prevent Sleep While Connected": create a power assertion with `IOPMAssertionCreateWithName`
+      to keep the system from sleeping (`kIOPMAssertionTypePreventSystemSleep`).
+  - Verification: after clicking "Visual Identification", the identification window appears on the target display
 
-## Phase 验收
+## Phase acceptance
 
-- 主显示屏切换正常
-- 刘海标签正确显示
-- 集成控制可读取 DDC 参数
-- 管理显示器的所有子功能工作
+- Main display switching works correctly
+- The notch label shows correctly
+- Integrated control can read DDC parameters
+- Every subfeature of Manage Display works
 
-**完成后**: 建议运行 project-optimize 反思
+**When done**: running project-optimize to reflect is recommended
