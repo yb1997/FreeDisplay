@@ -4,6 +4,20 @@ All notable changes to FreeDisplay are documented here.
 
 ---
 
+## v1.2.2 (2026-11-02)
+
+### Improvements
+
+- **Built-in updater**: when a new version is out, **Settings → Check for Updates** shows **Install** next to **Download**. FreeDisplay downloads the update, checks that it's signed by the same developer and is newer, replaces itself and restarts. It asks for your administrator password only if the app's folder isn't writable. If FreeDisplay runs from a disk image or from Downloads, move it to Applications first; until then only Download is offered.
+
+### Notes
+
+- The updater only works from this version on: if you're on v1.2.1 or earlier, install v1.2.2 by hand once.
+- The new texts are English-only for now in the Chinese translation.
+- Same install note as v1.1.0: the app isn't notarized; on first launch use **System Settings → Privacy & Security → Open Anyway**.
+
+---
+
 ## v1.2.1 (2026-11-02)
 
 ### Improvements
