@@ -4,6 +4,38 @@ All notable changes to FreeDisplay are documented here.
 
 ---
 
+## v1.2.0 (2026-11-02)
+
+Fixes from a full review of the app on Apple Silicon. Details: [docs/bug-report-2026-11-02.md](https://github.com/yb1997/FreeDisplay/blob/main/docs/bug-report-2026-11-02.md).
+
+### Fixes
+
+- **Built-in display brightness works on Apple Silicon**: the slider, the combined slider and fades now change the MacBook screen (they only moved the slider before).
+- **Auto Brightness** reads the real built-in brightness (it synced external displays to 100%), starts at launch, and keeps its sensitivity and on/off setting.
+- **Brightness is remembered** per display after a relaunch, and the slider follows Auto Brightness and presets.
+- **Brightness keys** step evenly when pressed quickly.
+- **DDC monitors** aren't switched to software dimming by one failed command (common right after wake or plug-in), are checked again after wake, and aren't dimmed twice. Garbage DDC replies are rejected.
+- **Image Adjustments**: Reset, Pause and closing the menu no longer remove your color profile or software dimming; positive Contrast and Gain now have an effect.
+- **Resolution** changes made in System Settings are no longer undone after sleep.
+- **Set as Main Display** keeps the layout's shape; *Keep external displays above the built-in display* places several monitors side by side.
+- **HiDPI** asks before enabling (it needs an administrator password) and remembers a "no" for that monitor.
+- **Virtual displays** are no longer blocked from auto-creating by a real monitor of the same size, and each one gets its own identity.
+- **Menu** scrolls to Settings, Virtual Displays or Auto Brightness when you expand them.
+- **Auto Brightness switch** can always be turned off; the **Current** preset accounts for HiDPI; **Launch at Login** shows its real status.
+
+### Improvements
+
+- Saved virtual displays can be turned on and off without deleting them.
+
+### Notes
+
+- Existing virtual displays get a new identity once, so macOS may forget their position one time.
+- A monitor without DDC gets its saved dimming back a few seconds after launch or wake.
+- A few new texts are English-only for now in the Chinese translation.
+- Same install note as v1.1.0: the app isn't notarized; on first launch use **System Settings → Privacy & Security → Open Anyway**.
+
+---
+
 ## v1.1.0 (2026-10-31)
 
 First release of the [yb1997/FreeDisplay](https://github.com/yb1997/FreeDisplay) fork, built on [huberdf/FreeDisplay](https://github.com/huberdf/FreeDisplay) by MingJie Ji.
