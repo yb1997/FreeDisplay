@@ -4,6 +4,19 @@ All notable changes to FreeDisplay are documented here.
 
 ---
 
+## v1.2.1 (2026-11-02)
+
+### Improvements
+
+- **Check for Updates** in Settings: checks GitHub right away and shows whether you're up to date, offers a **Download** button when a new version is out, and tells you when GitHub can't be reached. The automatic check at launch still runs quietly.
+
+### Notes
+
+- The new texts are English-only for now in the Chinese translation.
+- Same install note as v1.1.0: the app isn't notarized; on first launch use **System Settings → Privacy & Security → Open Anyway**.
+
+---
+
 ## v1.2.0 (2026-11-02)
 
 Fixes from a full review of the app on Apple Silicon. Details: [docs/bug-report-2026-11-02.md](https://github.com/yb1997/FreeDisplay/blob/main/docs/bug-report-2026-11-02.md).
