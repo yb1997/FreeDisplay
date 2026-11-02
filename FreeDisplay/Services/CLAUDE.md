@@ -20,7 +20,7 @@ and provide high-level APIs to Views/ViewModels.
 
 | File | Purpose |
 |------|------|
-| DDCService.swift | Low-level IOKit I2C / IOAVService DDC communication |
+| DDCService.swift | Low-level IOKit I2C / IOAVService DDC communication; one serial queue per display, `busQueue` barrier around IOAVService enumeration, writes coalesced to the newest value |
 | DisplayManager.swift | Display enumeration, refresh, cross-Service coordination |
 | BrightnessService.swift | Software brightness (written through GammaService) |
 | GammaService.swift | The single writer of the gamma table |

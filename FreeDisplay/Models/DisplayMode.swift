@@ -17,8 +17,6 @@ struct DisplayMode: Identifiable, Equatable {
     let refreshRate: Double
     /// Whether this is a HiDPI (Retina) scaled mode
     let isHiDPI: Bool
-    /// Whether this is the native (highest pixel resolution) mode
-    let isNative: Bool
     /// Raw IODisplayModeID for CGConfigureDisplayWithDisplayMode (same as id)
     var ioDisplayModeID: Int32 { id }
 
@@ -36,12 +34,14 @@ struct DisplayMode: Identifiable, Equatable {
 
     // MARK: - Enumeration helpers
 
-    /// Computes the native pixel width for a set of raw display modes.
-    /// Prefers the max pixelWidth among non-HiDPI modes (pixelWidth == width),
-    /// falling back to global max if all modes are HiDPI.
-    private static func nativePixelWidth(from rawModes: [CGDisplayMode]) -> Int {
-        rawModes.filter { $0.pixelWidth == $0.width }.map { $0.pixelWidth }.max()
-            ?? rawModes.map { $0.pixelWidth }.max() ?? 0
+    private init(_ mode: CGDisplayMode) {
+        id = mode.ioDisplayModeID
+        width = mode.width
+        height = mode.height
+        pixelWidth = mode.pixelWidth
+        pixelHeight = mode.pixelHeight
+        refreshRate = mode.refreshRate
+        isHiDPI = mode.pixelWidth > mode.width
     }
 
     /// Returns all display modes for the given display, sorted by logical width descending.
@@ -53,30 +53,12 @@ struct DisplayMode: Identifiable, Equatable {
             return []
         }
 
-        let maxPixelWidth = nativePixelWidth(from: rawModes)
-
         var seen = Set<Int32>()
         return rawModes.compactMap { mode -> DisplayMode? in
             let modeID = mode.ioDisplayModeID
             guard seen.insert(modeID).inserted else { return nil }  // deduplicate
             guard mode.isUsableForDesktopGUI() else { return nil }
-
-            let w = mode.width
-            let h = mode.height
-            let pw = mode.pixelWidth
-            let ph = mode.pixelHeight
-            let refresh = mode.refreshRate
-
-            return DisplayMode(
-                id: modeID,
-                width: w,
-                height: h,
-                pixelWidth: pw,
-                pixelHeight: ph,
-                refreshRate: refresh,
-                isHiDPI: pw > w,
-                isNative: pw >= maxPixelWidth
-            )
+            return DisplayMode(mode)
         }
         .sorted { lhs, rhs in
             if lhs.width != rhs.width { return lhs.width > rhs.width }
@@ -87,30 +69,8 @@ struct DisplayMode: Identifiable, Equatable {
         }
     }
 
-    /// Returns the current active display mode.
+    /// Returns the current active display mode. Cheap: doesn't enumerate all modes.
     static func currentMode(for displayID: CGDirectDisplayID) -> DisplayMode? {
-        guard let mode = CGDisplayCopyDisplayMode(displayID) else { return nil }
-
-        let options: CFDictionary = [kCGDisplayShowDuplicateLowResolutionModes: true] as CFDictionary
-        let allModes = (CGDisplayCopyAllDisplayModes(displayID, options) as? [CGDisplayMode]) ?? []
-        let maxPixelWidth = nativePixelWidth(from: allModes)
-
-        let w = mode.width
-        let h = mode.height
-        let pw = mode.pixelWidth
-        let ph = mode.pixelHeight
-        let refresh = mode.refreshRate
-        let modeID = mode.ioDisplayModeID
-
-        return DisplayMode(
-            id: modeID,
-            width: w,
-            height: h,
-            pixelWidth: pw,
-            pixelHeight: ph,
-            refreshRate: refresh,
-            isHiDPI: pw > w,
-            isNative: pw >= maxPixelWidth
-        )
+        CGDisplayCopyDisplayMode(displayID).map(DisplayMode.init)
     }
 }

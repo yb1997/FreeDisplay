@@ -35,7 +35,7 @@ The core display model, with many `@Published` properties. **Every View and Serv
 
 Value type for a single display mode (resolution + refresh rate + HiDPI flag).
 
-- The static method `currentMode(for:)` gets the current mode
+- The static method `currentMode(for:)` gets the current mode (one cheap `CGDisplayCopyDisplayMode` call; safe on the main thread)
 - `availableModes(for:)` gets the list of available modes (including HiDPI variants)
 - Changes affect ResolutionService and DisplayModeListView
 

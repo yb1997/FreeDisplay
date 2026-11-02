@@ -40,12 +40,11 @@ struct DisplayModeListView: View {
         }
     }
 
-    /// Compact: show top 4 groups
-    private var visibleGroups: [ResolutionGroup] {
-        showAllModes ? resolutionGroups : Array(resolutionGroups.prefix(4))
-    }
-
     var body: some View {
+        // Computed once per render: grouping sorts every mode.
+        let groups = resolutionGroups
+        // Compact: show top 4 groups
+        let visibleGroups = showAllModes ? groups : Array(groups.prefix(4))
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
@@ -65,7 +64,7 @@ struct DisplayModeListView: View {
             .padding(.top, 6)
             .padding(.bottom, 2)
 
-            if resolutionGroups.isEmpty {
+            if groups.isEmpty {
                 Text("No display modes available")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -85,12 +84,12 @@ struct DisplayModeListView: View {
                 }
 
                 // Toggle button
-                if resolutionGroups.count > 4 || showAllModes {
+                if groups.count > 4 || showAllModes {
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.2)) { showAllModes.toggle() }
                     }) {
                         HStack(spacing: 4) {
-                            Text(showAllModes ? String(localized: "Show Less") : String(localized: "Show All \(resolutionGroups.count)"))
+                            Text(showAllModes ? String(localized: "Show Less") : String(localized: "Show All \(groups.count)"))
                                 .font(.caption)
                                 .foregroundColor(.accentColor)
                             Image(systemName: showAllModes ? "chevron.up" : "chevron.down")

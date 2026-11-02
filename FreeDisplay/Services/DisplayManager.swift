@@ -262,16 +262,19 @@ class DisplayManager: ObservableObject {
     func refreshExistingDisplayModes() {
         for display in displays {
             // Cheap synchronous reads; arrangement, auto-arrange and presets rely on them.
-            display.isMain = CGDisplayIsMain(display.displayID) != 0
-            display.bounds = CGDisplayBounds(display.displayID)
-            display.pixelWidth = CGDisplayPixelsWide(display.displayID)
-            display.pixelHeight = CGDisplayPixelsHigh(display.displayID)
-            Task {
-                let newMode = await Task.detached(priority: .userInitiated) {
-                    DisplayMode.currentMode(for: display.displayID)
-                }.value
-                display.currentDisplayMode = newMode
-            }
+            // macOS sends one callback per display for a single change, so only assign what
+            // changed: every @Published assignment re-renders the views observing the display.
+            let id = display.displayID
+            let isMain = CGDisplayIsMain(id) != 0
+            if display.isMain != isMain { display.isMain = isMain }
+            let bounds = CGDisplayBounds(id)
+            if display.bounds != bounds { display.bounds = bounds }
+            let pixelWidth = CGDisplayPixelsWide(id)
+            if display.pixelWidth != pixelWidth { display.pixelWidth = pixelWidth }
+            let pixelHeight = CGDisplayPixelsHigh(id)
+            if display.pixelHeight != pixelHeight { display.pixelHeight = pixelHeight }
+            let mode = DisplayMode.currentMode(for: id)
+            if display.currentDisplayMode != mode { display.currentDisplayMode = mode }
         }
     }
 

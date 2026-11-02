@@ -42,3 +42,10 @@
 - **Lesson**: menu content is built lazily; never put startup work in it
 - **Date**: 2026-11-02
 
+
+### L-039: `@Published` fires on unchanged values; DDC writes need coalescing
+- **Symptom**: with the menu open, the 1 s built-in brightness poll re-rendered every view observing the `DisplayInfo` even when the level hadn't changed. On a slow DDC monitor, slider drags queued writes that kept landing after the drag ended.
+- **Solution**: only assign `DisplayInfo` properties that actually changed (polls and reconfiguration callbacks). `DDCService.writeAsync` keeps one pending value per display + VCP code, so a queued write always sends the newest value and drops the ones in between.
+- **Lesson**: a time throttle limits how often writes start, not how many pile up; coalesce to the latest value instead. `DisplayMode.currentMode(for:)` is now a single `CGDisplayCopyDisplayMode` call; don't enumerate every mode just to describe the current one.
+- **Follow-up**: DDCService now runs one serial queue per display. IOAVService enumeration test-reads *every* external display, so it runs as a `busQueue` barrier, and each I2C transaction (a read's request + 40 ms wait + reply included) runs as a plain `busQueue.sync`. Never call `findAVService` inside a `busQueue` block (deadlock). If concurrent IOAVService I/O on two monitors misbehaves, make `queue(for:)` return one shared queue to go back to the old behavior. Slider drags save brightness only at drag end (`setBrightness(persist: false)`).
+- **Date**: 2026-11-03

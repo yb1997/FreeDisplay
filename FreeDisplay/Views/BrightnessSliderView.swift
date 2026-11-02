@@ -91,7 +91,8 @@ struct BrightnessSliderView: View {
                     lastDDCWrite = now
                     display.brightness = newValue
                     Task { @MainActor in
-                        await BrightnessService.shared.setBrightness(newValue, for: display)
+                        // Saved once, by the drag-end setBrightnessSmooth.
+                        await BrightnessService.shared.setBrightness(newValue, for: display, persist: false)
                     }
                 }
 
@@ -226,7 +227,7 @@ struct CombinedBrightnessView: View {
                     Task { @MainActor in
                         for display in displays {
                             display.brightness = newValue
-                            await BrightnessService.shared.setBrightness(newValue, for: display)
+                            await BrightnessService.shared.setBrightness(newValue, for: display, persist: false)
                         }
                     }
                 }

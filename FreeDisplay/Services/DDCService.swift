@@ -12,7 +12,8 @@ private func CGDisplayIOServicePort(_ display: CGDirectDisplayID) -> io_service_
 /// Supports two hardware paths:
 ///   - ARM64 (Apple Silicon): IOAVService via DCPAVServiceProxy
 ///   - x86_64 (Intel):        IOFramebuffer I2C via IOFBCopyI2CInterfaceForBus
-/// All I2C operations run on a private background queue to avoid blocking UI.
+/// I2C operations run on background queues to avoid blocking the UI: one serial queue per
+/// display, so a slow or unresponsive monitor doesn't hold up the others.
 final class DDCService: ObservableObject, @unchecked Sendable {
     static let shared = DDCService()
 
@@ -21,7 +22,30 @@ final class DDCService: ObservableObject, @unchecked Sendable {
     static let contrastVCP: UInt8   = 0x12
     static let powerVCP: UInt8      = 0xD6
 
-    private let ddcQueue = DispatchQueue(label: "com.freedisplay.ddc", qos: .userInitiated)
+    // MARK: - Queues
+
+    /// One serial queue per display. Never removed: a reconnected display that reuses its ID
+    /// must not get a second queue while the old one still has work queued.
+    private var displayQueues: [CGDirectDisplayID: DispatchQueue] = [:]
+    private let displayQueuesLock = NSLock()
+
+    private func queue(for displayID: CGDirectDisplayID) -> DispatchQueue {
+        displayQueuesLock.withLock {
+            if let existing = displayQueues[displayID] { return existing }
+            let queue = DispatchQueue(label: "com.freedisplay.ddc.\(displayID)", qos: .userInitiated)
+            displayQueues[displayID] = queue
+            return queue
+        }
+    }
+
+#if arch(arm64)
+    /// Guards the I2C buses across the per-display queues. Each transaction runs as a plain
+    /// `sync` (transactions on different displays run concurrently); IOAVService enumeration,
+    /// which sends test reads to every external display, runs as a barrier so it can't land in
+    /// the middle of another display's request/reply. ❌ Never call findAVService inside a
+    /// `busQueue` block: a barrier from inside the queue deadlocks.
+    private let busQueue = DispatchQueue(label: "com.freedisplay.ddc.bus", qos: .userInitiated, attributes: .concurrent)
+#endif
 
     // MARK: - VCP Read Cache (5-second TTL)
 
@@ -34,6 +58,22 @@ final class DDCService: ObservableObject, @unchecked Sendable {
 
     private var vcpCache: [CGDirectDisplayID: [UInt8: VCPCacheEntry]] = [:]
     private let cacheLock = NSLock()
+
+    // MARK: - Write Coalescing
+
+    private struct WriteKey: Hashable {
+        let displayID: CGDirectDisplayID
+        let command: UInt8
+    }
+
+    private struct PendingWrite {
+        let value: UInt16
+        let completion: (@Sendable (Bool) -> Void)?
+    }
+
+    /// Newest value not yet sent, per display and VCP code. See `writeAsync`.
+    private var pendingWrites: [WriteKey: PendingWrite] = [:]
+    private let pendingWritesLock = NSLock()
 
     // MARK: - IOAVService Cache (ARM64 only)
 
@@ -204,10 +244,27 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         }
         avServiceLock.unlock()
 
-        // Slow path: enumerate all DCPAVServiceProxy nodes in the IOKit registry.
-        // Double-checked locking: another thread may have filled the cache between
-        // the fast-path unlock and now, so we re-check inside the lock at the end
-        // before writing results.
+        // Slow path: enumerate all DCPAVServiceProxy nodes in the IOKit registry, exclusively
+        // (see busQueue). After wake every display misses the cache at once; the re-check
+        // inside the barrier lets the others reuse the first enumeration.
+        let result: IOAVServiceRef? = busQueue.sync(flags: .barrier) {
+            if let cached = avServiceLock.withLock({ avServiceCache[displayID] }) { return cached }
+            return enumerateAVServices(for: displayID)
+        }
+
+        #if DEBUG
+        if result != nil {
+            print("[DDCService] ARM64: found IOAVService for display \(displayID)")
+        } else {
+            print("[DDCService] ARM64: no IOAVService found for display \(displayID)")
+        }
+        #endif
+        return result
+    }
+
+    /// Enumerates external IOAVServices, test-reads each, and fills `avServiceCache`.
+    /// Must run as a `busQueue` barrier (it does I2C on every external display).
+    private func enumerateAVServices(for displayID: CGDirectDisplayID) -> IOAVServiceRef? {
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(
             kIOMainPortDefault,
@@ -267,8 +324,7 @@ final class DDCService: ObservableObject, @unchecked Sendable {
             IOObjectRelease(pair.ioEntry)
         }
 
-        // Re-check cache (double-checked locking) in case another thread enumerated
-        // and populated the cache while we were enumerating without the lock held.
+        // Defensive re-check; enumeration is already exclusive (busQueue barrier).
         avServiceLock.lock()
         if let cached = avServiceCache[displayID] {
             avServiceLock.unlock()
@@ -280,14 +336,6 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         }
         let result = avServiceCache[displayID]
         avServiceLock.unlock()
-
-        #if DEBUG
-        if result != nil {
-            print("[DDCService] ARM64: found IOAVService for display \(displayID)")
-        } else {
-            print("[DDCService] ARM64: no IOAVService found for display \(displayID)")
-        }
-        #endif
         return result
     }
 
@@ -314,7 +362,7 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         for b in payload { checksum ^= b }
 
         var buf: [UInt8] = payload + [checksum]
-        let ret = IOAVServiceWriteI2C(avService, 0x37, 0x51, &buf, UInt32(buf.count))
+        let ret = busQueue.sync { IOAVServiceWriteI2C(avService, 0x37, 0x51, &buf, UInt32(buf.count)) }
         #if DEBUG
         if ret == kIOReturnSuccess {
             print("[DDCService] ARM64 write VCP 0x\(String(command, radix: 16)) = \(value) OK")
@@ -337,7 +385,16 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         for b in requestPayload { requestChecksum ^= b }
         var requestBuf: [UInt8] = requestPayload + [requestChecksum]
 
-        let writeRet = IOAVServiceWriteI2C(avService, 0x37, 0x51, &requestBuf, UInt32(requestBuf.count))
+        // Request, wait and reply form one transaction: enumeration on another display's
+        // queue must not read this bus in between, or it takes the reply.
+        var replyBuf = [UInt8](repeating: 0, count: 12)
+        let (writeRet, readRet): (IOReturn, IOReturn) = busQueue.sync {
+            let writeRet = IOAVServiceWriteI2C(avService, 0x37, 0x51, &requestBuf, UInt32(requestBuf.count))
+            guard writeRet == kIOReturnSuccess else { return (writeRet, kIOReturnSuccess) }
+            // Wait for the display to prepare its DDC/CI reply (~40ms per spec)
+            Thread.sleep(forTimeInterval: 0.04)
+            return (writeRet, IOAVServiceReadI2C(avService, 0x37, 0x51, &replyBuf, UInt32(replyBuf.count)))
+        }
         guard writeRet == kIOReturnSuccess else {
             #if DEBUG
             print("[DDCService] ARM64 read request failed for VCP 0x\(String(command, radix: 16)): \(writeRet)")
@@ -345,12 +402,6 @@ final class DDCService: ObservableObject, @unchecked Sendable {
             return nil
         }
 
-        // Wait for the display to prepare its DDC/CI reply (~40ms per spec)
-        Thread.sleep(forTimeInterval: 0.04)
-
-        // Read the VCP reply
-        var replyBuf = [UInt8](repeating: 0, count: 12)
-        let readRet = IOAVServiceReadI2C(avService, 0x37, 0x51, &replyBuf, UInt32(replyBuf.count))
         guard readRet == kIOReturnSuccess else {
             #if DEBUG
             print("[DDCService] ARM64 read reply failed for VCP 0x\(String(command, radix: 16)): \(readRet)")
@@ -452,7 +503,7 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         return cs
     }
 
-    // MARK: - Synchronous DDC I/O (called on ddcQueue)
+    // MARK: - Synchronous DDC I/O (called on the display's queue)
 
     /// Synchronous DDC write (VCP Set). Returns true on success.
     /// On ARM64 uses the IOAVService path; on x86_64 uses the IOFramebuffer I2C path.
@@ -652,25 +703,47 @@ final class DDCService: ObservableObject, @unchecked Sendable {
     /// `completion` runs on the DDC queue, so it must be `@Sendable`: a closure written inside
     /// a `@MainActor` method would otherwise inherit MainActor isolation and trap at runtime.
     /// Invalidates the cache for the written VCP code on success.
+    ///
+    /// Writes are coalesced per display and VCP code: a value replaced by a newer one before it
+    /// is sent is dropped, and its `completion` is never called. A write that failed while a newer
+    /// value was waiting isn't retried; its `completion` gets `false`. This keeps slider drags
+    /// from queueing up stale values.
     func writeAsync(
         displayID: CGDirectDisplayID,
         command: UInt8,
         value: UInt16,
         completion: (@Sendable (Bool) -> Void)? = nil
     ) {
-        ddcQueue.async {
+        let key = WriteKey(displayID: displayID, command: command)
+        let alreadyQueued = pendingWritesLock.withLock {
+            let queued = pendingWrites[key] != nil
+            pendingWrites[key] = PendingWrite(value: value, completion: completion)
+            return queued
+        }
+        // The block already queued for this key will pick up the new value.
+        guard !alreadyQueued else { return }
+
+        queue(for: displayID).async {
+            guard let write = self.pendingWritesLock.withLock({ self.pendingWrites.removeValue(forKey: key) }) else { return }
             for attempt in 0..<3 {
-                if self.writeSynchronous(displayID: displayID, command: command, value: value) {
+                if self.writeSynchronous(displayID: displayID, command: command, value: write.value) {
                     // Invalidate cached value so next read reflects the new setting.
                     self.cacheLock.lock()
                     self.vcpCache[displayID]?[command] = nil
                     self.cacheLock.unlock()
-                    completion?(true)
+                    write.completion?(true)
+                    return
+                }
+                // A newer value is waiting: stop retrying this one and let that write run.
+                // Still report the failure, so DDC availability tracking and the per-change
+                // software fallback keep working during a drag.
+                if self.pendingWritesLock.withLock({ self.pendingWrites[key] != nil }) {
+                    write.completion?(false)
                     return
                 }
                 if attempt < 2 { Thread.sleep(forTimeInterval: 0.05) }
             }
-            completion?(false)
+            write.completion?(false)
         }
     }
 
@@ -690,7 +763,7 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         }
         cacheLock.unlock()
 
-        ddcQueue.async {
+        queue(for: displayID).async {
             for attempt in 0..<3 {
                 if let r = self.readSynchronous(displayID: displayID, command: command) {
                     self.cacheLock.lock()
@@ -730,7 +803,7 @@ final class DDCService: ObservableObject, @unchecked Sendable {
         }
 
         return await withCheckedContinuation { continuation in
-            ddcQueue.async {
+            queue(for: displayID).async {
                 var result: [UInt8: UInt16?] = [:]
                 var cachedCodes = Set<UInt8>()
 

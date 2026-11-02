@@ -91,11 +91,19 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
         pollingTask = Task.detached { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                let brightness = self.readBuiltinBrightness()
-                await self.applyBrightness(builtin: brightness)
+                // Nothing to sync to without an external display: skip the read.
+                if await self.hasExternalDisplay() {
+                    let brightness = self.readBuiltinBrightness()
+                    await self.applyBrightness(builtin: brightness)
+                }
                 try? await Task.sleep(nanoseconds: UInt64(self.pollingInterval * 1_000_000_000))
             }
         }
+    }
+
+    @MainActor
+    private func hasExternalDisplay() -> Bool {
+        DisplayManagerAccessor.shared.displays.contains { !$0.isBuiltin }
     }
 
     private func stopPolling() {
@@ -105,8 +113,10 @@ final class AutoBrightnessService: ObservableObject, @unchecked Sendable {
 
     @MainActor
     private func applyBrightness(builtin: Double?) async {
-        builtinBrightness = builtin ?? 0
-        hasPolled = true
+        // Assign only on change: each @Published assignment re-renders AutoBrightnessView.
+        let reading = builtin ?? 0
+        if abs(builtinBrightness - reading) > 0.001 { builtinBrightness = reading }
+        if !hasPolled { hasPolled = true }
 
         guard let builtin, builtin > 0 else { return }
 
