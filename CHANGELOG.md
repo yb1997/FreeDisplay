@@ -4,6 +4,21 @@ All notable changes to FreeDisplay are documented here.
 
 ---
 
+## v1.2.4 (2026-11-03)
+
+### Improvements
+
+- **Smoother external monitor brightness**: dragging the brightness slider for a DDC monitor no longer builds up a backlog of commands. The monitor now stops at the value you let go on, instead of continuing to step through old values on slower monitors.
+- **Monitors no longer wait on each other**: with several external monitors, a slow or unresponsive one no longer delays brightness changes on the others.
+- **Lighter menu**: the open menu redraws less often, and reading the current resolution is much cheaper, which reduces hitches at launch, when a display is plugged in, and after wake.
+- **Less background work**: brightness is saved once when you finish dragging, not on every step, and Auto Brightness pauses its checks while no external display is connected.
+
+### Notes
+
+- Same install note as v1.1.0: the app isn't notarized; on first launch use **System Settings → Privacy & Security → Open Anyway**.
+
+---
+
 ## v1.2.3 (2026-11-02)
 
 ### Fixes
